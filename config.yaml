@@ -1,0 +1,19 @@
+# Local development config
+database:
+  host: localhost
+  port: 5432
+  user: postgres
+  password: postgres
+  name: jobscheduler
+  sslmode: disable
+
+server:
+  host: 0.0.0.0
+  port: 8080
+
+scheduler:
+  max_workers: 10
+  poll_interval_sec: 10
+  job_timeout_sec: 3600
+
+log_level: info

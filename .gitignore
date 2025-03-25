@@ -1,1 +1,26 @@
+# Binaries and executables
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+bin/
+
+# Testing
+*.test
+*.out
+
+# Dependency directories
+vendor/
+
+# IDE files
 .idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+
+# Environment variables
+.env

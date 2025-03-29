@@ -16,4 +16,9 @@ scheduler:
   poll_interval_sec: 10
   job_timeout_sec: 3600
 
+queue:
+  host: localhost:6379
+  password: redis
+  db: 0
+
 log_level: info

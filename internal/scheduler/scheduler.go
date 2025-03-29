@@ -9,6 +9,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/robfig/cron/v3"
 	"github.com/rs/zerolog/log"
+	"jobrunner/internal/queue"
 )
 
 type ScheduledCronJob struct {
@@ -18,6 +19,7 @@ type ScheduledCronJob struct {
 
 type Scheduler struct {
 	db               *sqlx.DB
+	queue            queue.Client
 	cron             *cron.Cron
 	depProbe         *DependencyProbe
 	scheduleIDMap    map[int64]ScheduledCronJob // the key is the ScheduleID
@@ -29,7 +31,7 @@ type Scheduler struct {
 }
 
 // NewScheduler creates a new scheduler service
-func NewScheduler(db *sqlx.DB) *Scheduler {
+func NewScheduler(db *sqlx.DB, queue queue.Client) *Scheduler {
 	// Create cron with seconds precision
 	c := cron.New(
 		cron.WithParser(cron.NewParser(cron.SecondOptional|cron.Minute|cron.Hour|cron.Dom|cron.Month|cron.Dow)),
@@ -40,6 +42,7 @@ func NewScheduler(db *sqlx.DB) *Scheduler {
 
 	return &Scheduler{
 		db:               db,
+		queue:            queue,
 		cron:             c,
 		depProbe:         NewDependencyProbe(db),
 		scheduleIDMap:    make(map[int64]ScheduledCronJob),
@@ -244,23 +247,52 @@ func (s *Scheduler) scheduleJobExecution(ctx context.Context, schedule Schedule)
 		INSERT INTO tasks.execution
 		(job_id, status, dependencies_met)
 		VALUES ($1, $2, $3)
-		RETURNING id
+		RETURNING id, created_at
 	`
 
 	status := "pending"
 
 	var executionID int64
-	err = s.db.GetContext(ctx, &executionID, query, schedule.JobID, status, depsMetInitially)
+	var createdAt time.Time
+	err = s.db.
+		QueryRowContext(ctx, query, schedule.JobID, status, depsMetInitially).
+		Scan(&executionID, &createdAt)
+
 	if err != nil {
 		log.Error().
 			Err(err).
 			Int64("job_id", schedule.JobID).
 			Msg("Failed to create job execution")
-	} else {
-		log.Info().
-			Int64("job_id", schedule.JobID).
-			Int64("execution_id", executionID).
-			Bool("dependencies_met", depsMetInitially).
-			Msg("Job execution scheduled")
 	}
+
+	if depsMetInitially && s.queue != nil {
+		msg := queue.TaskMessage{
+			ExecutionID: executionID,
+			JobID:       schedule.JobID,
+			Command:     schedule.Command,
+			ImageName:   schedule.ImageName.String,
+			Timeout:     schedule.TimeoutSeconds,
+			MaxRetries:  schedule.MaxRetries,
+			ScheduledAt: createdAt,
+		}
+
+		if err := s.queue.Publish(ctx, msg); err != nil {
+			log.Error().
+				Err(err).
+				Int64("job_id", schedule.JobID).
+				Int64("execution_id", executionID).
+				Msg("Failed to publish job to queue")
+		} else {
+			log.Info().
+				Int64("job_id", schedule.JobID).
+				Int64("execution_id", executionID).
+				Msg("Job scheduled and published to queue")
+		}
+	}
+
+	log.Info().
+		Int64("job_id", schedule.JobID).
+		Int64("execution_id", executionID).
+		Bool("dependencies_met", depsMetInitially).
+		Msg("Job execution scheduled")
 }

@@ -1,9 +1,10 @@
 package config_test
 
 import (
-	"jobrunner/internal/config"
 	"os"
 	"testing"
+
+	"jobrunner/internal/config"
 
 	"github.com/stretchr/testify/assert"
 )

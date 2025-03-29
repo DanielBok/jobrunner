@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	_ "github.com/lib/pq"
 	"github.com/robfig/cron/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -15,7 +14,7 @@ import (
 func TestGetAllSchedules(t *testing.T) {
 	// Create a new mock database
 	clearTestDB(t)
-	scheduler := jrs.NewScheduler(db)
+	scheduler := jrs.NewScheduler(db, nil)
 	idMap := preloadTestDB(t)
 
 	// Call the function
@@ -67,7 +66,7 @@ func TestAddAndRemoveSchedule(t *testing.T) {
 	clearTestDB(t)
 	preloadTestDB(t)
 
-	scheduler := jrs.NewScheduler(db)
+	scheduler := jrs.NewScheduler(db, nil)
 
 	// Ensure we're starting clean
 	scheduler.RemoveSchedule(1)

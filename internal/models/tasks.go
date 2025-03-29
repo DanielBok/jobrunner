@@ -22,16 +22,26 @@ type TasksJob struct {
 	IsActive       bool        `db:"is_active"`
 }
 
+type RequiredCondition string
+
+const (
+	RcSuccess    RequiredCondition = "success"
+	RcCompletion RequiredCondition = "completion"
+	RcFailure    RequiredCondition = "failure"
+	RcCancelled  RequiredCondition = "cancelled"
+	RcLapsed     RequiredCondition = "lapsed"
+)
+
 // TasksDependency is a models representing the `tasks.dependency` table
 type TasksDependency struct {
-	ID                int64     `db:"id"`
-	JobID             int64     `db:"job_id"`
-	DependsOn         int64     `db:"depends_on"`
-	LookbackWindow    int       `db:"lookback_window"`
-	MinWaitTime       int       `db:"min_wait_time"`
-	RequiredCondition string    `db:"required_condition"`
-	CreatedAt         time.Time `db:"created_at"`
-	UpdatedAt         time.Time `db:"updated_at"`
+	ID                int64             `db:"id"`
+	JobID             int64             `db:"job_id"`
+	DependsOn         int64             `db:"depends_on"`
+	LookbackWindow    int               `db:"lookback_window"`
+	MinWaitTime       int               `db:"min_wait_time"`
+	RequiredCondition RequiredCondition `db:"required_condition"`
+	CreatedAt         time.Time         `db:"created_at"`
+	UpdatedAt         time.Time         `db:"updated_at"`
 }
 
 // TasksSchedule is a models representing the `tasks.schedule` table
@@ -44,17 +54,27 @@ type TasksSchedule struct {
 	UpdatedAt      time.Time `db:"updated_at"`
 }
 
+type ExecutionStatus string
+
+const (
+	EsPending   ExecutionStatus = "pending"
+	EsRunning   ExecutionStatus = "running"
+	EsCompleted ExecutionStatus = "completed"
+	EsFailed    ExecutionStatus = "failed"
+	EsCancelled ExecutionStatus = "cancelled"
+	EsLapsed    ExecutionStatus = "lapsed"
+)
+
 type TasksExecution struct {
-	ID              int64       `db:"id"`
-	JobID           int64       `db:"job_id"`
-	Status          string      `db:"status"` // must be one of 'pending', 'running', 'completed', 'failed'
-	StartTime       null.Time   `db:"start_time"`
-	EndTime         null.Time   `db:"end_time"`
-	ExitCode        int         `db:"exit_code"`
-	Output          null.String `db:"output"`
-	Error           null.String `db:"error"`
-	Attempts        int         `db:"attempts"`
-	DependenciesMet bool        `db:"dependencies_met"`
-	WorkerId        null.String `db:"worker_id"`
-	CreatedAt       time.Time   `db:"created_at"`
+	ID        int64           `db:"id"`
+	JobID     int64           `db:"job_id"`
+	Status    ExecutionStatus `db:"status"`
+	StartTime null.Time       `db:"start_time"`
+	EndTime   null.Time       `db:"end_time"`
+	ExitCode  int             `db:"exit_code"`
+	Output    null.String     `db:"output"`
+	Error     null.String     `db:"error"`
+	Attempts  int             `db:"attempts"`
+	WorkerId  null.String     `db:"worker_id"`
+	CreatedAt time.Time       `db:"created_at"`
 }

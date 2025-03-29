@@ -16,7 +16,7 @@ func TestDependencyResolver_CheckDependencies(t *testing.T) {
 	clearTestDB(t)
 
 	// Create test resolver
-	resolver := scheduler.NewDependencyProbe(db)
+	resolver := scheduler.NewDependencyProbe(db, rq)
 
 	// Test cases
 	t.Run("no dependencies should return true", func(t *testing.T) {
@@ -36,7 +36,7 @@ func TestDependencyResolver_CheckDependencies(t *testing.T) {
 		// Insert successful execution that ended recently
 		startTime := null.NewTime(time.Now(), false)
 		endTime := null.TimeFrom(time.Now().Add(-time.Minute))
-		insertExecution(t, parentJobID, "completed", 0, startTime, endTime, false)
+		insertExecution(t, parentJobID, "completed", 0, startTime, endTime)
 
 		// Check dependencies
 		met, err := resolver.CheckDependencies(context.Background(), []scheduler.JobDependency{{
@@ -62,7 +62,7 @@ func TestDependencyResolver_CheckDependencies(t *testing.T) {
 		// Insert successful execution that ended too long ago (15 minutes)
 		startTime := null.NewTime(time.Now(), false)
 		endTime := null.TimeFrom(time.Now().Add(-15 * time.Minute))
-		insertExecution(t, parentJobID, "completed", 0, startTime, endTime, true)
+		insertExecution(t, parentJobID, "completed", 0, startTime, endTime)
 
 		// Check dependencies
 		met, err := resolver.CheckDependencies(context.Background(), []scheduler.JobDependency{{
@@ -112,7 +112,7 @@ func TestDependencyResolver_CheckDependencies(t *testing.T) {
 		// Insert failed execution (non-zero exit code)
 		startTime := null.NewTime(time.Now(), false)
 		endTime := null.TimeFrom(time.Now().Add(-15 * time.Minute))
-		insertExecution(t, parentJobID, "failed", 1, startTime, endTime, true)
+		insertExecution(t, parentJobID, "failed", 1, startTime, endTime)
 
 		// Check dependencies
 		met, err := resolver.CheckDependencies(context.Background(), []scheduler.JobDependency{{
@@ -138,7 +138,7 @@ func TestDependencyResolver_CheckDependencies(t *testing.T) {
 		// Insert failed execution with proper exit code (not -1)
 		startTime := null.NewTime(time.Now(), false)
 		endTime := null.TimeFrom(time.Now().Add(-time.Minute))
-		insertExecution(t, parentJobID, "failed", 1, startTime, endTime, true)
+		insertExecution(t, parentJobID, "failed", 1, startTime, endTime)
 
 		// Check dependencies
 		met, err := resolver.CheckDependencies(context.Background(), []scheduler.JobDependency{{
@@ -164,7 +164,7 @@ func TestDependencyResolver_CheckDependencies(t *testing.T) {
 		// Insert failed execution
 		startTime := null.NewTime(time.Now(), false)
 		endTime := null.TimeFrom(time.Now().Add(-time.Minute))
-		insertExecution(t, parentJobID, "failed", 1, startTime, endTime, true)
+		insertExecution(t, parentJobID, "failed", 1, startTime, endTime)
 
 		// Check dependencies
 		met, err := resolver.CheckDependencies(context.Background(), []scheduler.JobDependency{{
@@ -193,8 +193,8 @@ func TestDependencyResolver_CheckDependencies(t *testing.T) {
 		// Insert successful executions
 		startTime := null.NewTime(time.Now(), false)
 		endTime := null.TimeFrom(time.Now().Add(-time.Minute))
-		insertExecution(t, parentJobID1, "completed", 0, startTime, endTime, true)
-		insertExecution(t, parentJobID2, "completed", 0, startTime, endTime, true)
+		insertExecution(t, parentJobID1, "completed", 0, startTime, endTime)
+		insertExecution(t, parentJobID2, "completed", 0, startTime, endTime)
 
 		// Check dependencies
 		met, err := resolver.CheckDependencies(context.Background(), []scheduler.JobDependency{
@@ -231,8 +231,8 @@ func TestDependencyResolver_CheckDependencies(t *testing.T) {
 		// Insert one successful and one failed execution
 		startTime := null.NewTime(time.Now(), false)
 		endTime := null.TimeFrom(time.Now().Add(-time.Minute))
-		insertExecution(t, parentJobID1, "completed", 0, startTime, endTime, true)
-		insertExecution(t, parentJobID2, "failed", 1, startTime, endTime, true)
+		insertExecution(t, parentJobID1, "completed", 0, startTime, endTime)
+		insertExecution(t, parentJobID2, "failed", 1, startTime, endTime)
 
 		// Check dependencies
 		met, err := resolver.CheckDependencies(context.Background(), []scheduler.JobDependency{

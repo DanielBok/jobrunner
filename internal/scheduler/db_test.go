@@ -13,10 +13,12 @@ import (
 	"github.com/stretchr/testify/require"
 	"jobrunner/internal/config"
 	"jobrunner/internal/models"
+	"jobrunner/internal/queue"
 )
 
 // The test database
 var db *sqlx.DB
+var rq queue.Client
 
 func TestMain(m *testing.M) {
 	conf, err := config.LoadConfig()
@@ -25,9 +27,13 @@ func TestMain(m *testing.M) {
 	}
 
 	db, err = sqlx.Connect("pgx", conf.GetDatabaseURL())
-
 	if err != nil {
 		log.Fatalf("Failed to connect to test database: %v", err)
+	}
+
+	rq, err = queue.NewRedisClient(conf.Queue.Host, conf.Queue.Password, conf.Queue.DB)
+	if err != nil {
+		log.Fatalf("Failed to connect to test redis: %v", err)
 	}
 
 	defer func() {
@@ -93,14 +99,14 @@ func insertJob(t *testing.T, name, command string) int64 {
 	return id
 }
 
-func insertDependency(t *testing.T, jobID, dependsOn int64, requiredCondition string, lookbackWindow, minWaitTime int) int64 {
+func insertDependency(t *testing.T, jobID, dependsOn int64, condition models.RequiredCondition, lookbackWindow, minWaitTime int) int64 {
 	var id int64
 	err := db.QueryRow(`
 		INSERT INTO tasks.dependency (job_id, depends_on, required_condition, lookback_window, min_wait_time)
 		VALUES ($1, $2, $3, $4, $5)
 		RETURNING id
-	`, jobID, dependsOn, requiredCondition, lookbackWindow, minWaitTime).Scan(&id)
-	require.NoError(t, err, "Could not insert dependency: job_id=%d depends_on=%d required_condition=%q", jobID, dependsOn, requiredCondition)
+	`, jobID, dependsOn, condition, lookbackWindow, minWaitTime).Scan(&id)
+	require.NoError(t, err, "Could not insert dependency: job_id=%d depends_on=%d required_condition=%q", jobID, dependsOn, condition)
 	return id
 }
 
@@ -116,24 +122,24 @@ func insertSchedule(t *testing.T, jobID int64, cronExpression string) int64 {
 	return id
 }
 
-func insertExecution(t *testing.T, jobId int64, status string, exitCode int, startTime, endTime null.Time, depsMet bool) int64 {
+func insertExecution(t *testing.T, jobId int64, status models.ExecutionStatus, exitCode int, startTime, endTime null.Time) int64 {
 	var id int64
 
 	err := db.QueryRow(`
-		INSERT INTO tasks.execution (job_id, status, exit_code, start_time, end_time, dependencies_met)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO tasks.execution (job_id, status, exit_code, start_time, end_time)
+		VALUES ($1, $2, $3, $4, $5)
 		RETURNING id
-	`, jobId, status, exitCode, startTime, endTime, depsMet).Scan(&id)
+	`, jobId, status, exitCode, startTime, endTime).Scan(&id)
 
 	require.NoError(t, err, "Could not insert execution")
 	return id
 }
 
-func insertTestExecutionWithNullEndTime(t *testing.T, db *sqlx.DB, jobID int64, status string, exitCode int) int64 {
+func insertTestExecutionWithNullEndTime(t *testing.T, db *sqlx.DB, jobID int64, status models.ExecutionStatus, exitCode int) int64 {
 	var id int64
 	err := db.QueryRow(`
-		INSERT INTO tasks.execution (job_id, status, start_time, end_time, exit_code, dependencies_met)
-		VALUES ($1, $2, $3, NULL, $4, TRUE)
+		INSERT INTO tasks.execution (job_id, status, start_time, end_time, exit_code)
+		VALUES ($1, $2, $3, NULL, $4)
 		RETURNING id
 	`, jobID, status, time.Now().Add(-time.Minute), exitCode).Scan(&id)
 	require.NoError(t, err)

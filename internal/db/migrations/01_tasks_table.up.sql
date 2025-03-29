@@ -15,6 +15,8 @@ CREATE TABLE tasks.job
     is_active       BOOLEAN                  NOT NULL DEFAULT TRUE
 );
 
+CREATE TYPE tasks.required_condition AS ENUM ('success', 'completion', 'failure', 'cancelled', 'lapsed');
+
 -- Job dependencies table
 CREATE TABLE tasks.dependency
 (
@@ -23,7 +25,7 @@ CREATE TABLE tasks.dependency
     depends_on         BIGINT                   NOT NULL REFERENCES tasks.job (id) ON DELETE CASCADE,
     lookback_window    INT                      NOT NULL DEFAULT 86400,
     min_wait_time      INT                      NOT NULL DEFAULT 0, -- Minimum wait time (seconds) after parent dependency met
-    required_condition VARCHAR(20)              NOT NULL DEFAULT 'success' CHECK (required_condition IN ('success', 'completion', 'failure')),
+    required_condition tasks.required_condition NOT NULL DEFAULT 'success',
     created_at         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
     updated_at         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
     CONSTRAINT uq_dependency UNIQUE (job_id, depends_on),
@@ -45,19 +47,20 @@ CREATE TABLE tasks.schedule
     updated_at      TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );
 
+CREATE TYPE tasks.execution_status AS ENUM ('pending', 'running', 'completed', 'failed', 'cancelled', 'lapsed');
+
 -- Job executions to track history
 CREATE TABLE tasks.execution
 (
     id               BIGSERIAL PRIMARY KEY,
     job_id           BIGINT REFERENCES tasks.job (id) ON DELETE CASCADE,
-    status           VARCHAR(50)              NOT NULL CHECK (status IN ('pending', 'running', 'completed', 'failed')),
+    status           tasks.execution_status   NOT NULL DEFAULT 'pending',
     start_time       TIMESTAMP WITH TIME ZONE,
     end_time         TIMESTAMP WITH TIME ZONE,
     exit_code        INT                      NOT NULL DEFAULT -1,
     output           TEXT,
     error            TEXT,
     attempts         INT                      NOT NULL DEFAULT 0,
-    dependencies_met BOOLEAN                  NOT NULL DEFAULT FALSE,
     worker_id        VARCHAR(100),
     created_at       TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );

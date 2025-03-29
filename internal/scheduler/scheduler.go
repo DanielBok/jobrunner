@@ -9,6 +9,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/robfig/cron/v3"
 	"github.com/rs/zerolog/log"
+	"jobrunner/internal/models"
 	"jobrunner/internal/queue"
 )
 
@@ -19,15 +20,16 @@ type ScheduledCronJob struct {
 
 type Scheduler struct {
 	db               *sqlx.DB
-	queue            queue.Client
 	cron             *cron.Cron
 	depProbe         *DependencyProbe
 	scheduleIDMap    map[int64]ScheduledCronJob // the key is the ScheduleID
 	scheduleMapMutex sync.RWMutex
 
-	refreshTicker  *time.Ticker
-	refreshContext context.Context
-	refreshCancel  context.CancelFunc
+	// Used for refresh operations
+	isRunning  bool // checks if start has been called
+	ticker     *time.Ticker
+	context    context.Context
+	cancelFunc context.CancelFunc
 }
 
 // NewScheduler creates a new scheduler service
@@ -38,57 +40,78 @@ func NewScheduler(db *sqlx.DB, queue queue.Client) *Scheduler {
 		cron.WithLocation(time.UTC),
 	)
 
-	refreshCtx, refreshCancel := context.WithCancel(context.Background())
-
 	return &Scheduler{
 		db:               db,
-		queue:            queue,
 		cron:             c,
-		depProbe:         NewDependencyProbe(db),
+		depProbe:         NewDependencyProbe(db, queue),
 		scheduleIDMap:    make(map[int64]ScheduledCronJob),
 		scheduleMapMutex: sync.RWMutex{},
-		refreshContext:   refreshCtx,
-		refreshCancel:    refreshCancel,
+		isRunning:        false,
 	}
 }
 
 // Start begins the scheduler service
 func (s *Scheduler) Start(ctx context.Context) error {
+	if s.isRunning {
+		return nil
+	}
+
+	s.isRunning = true
+	s.context, s.cancelFunc = context.WithCancel(ctx)
+
 	// Load all schedules
-	if err := s.RefreshSchedules(ctx); err != nil {
+	if err := s.RefreshSchedules(s.context); err != nil {
 		return err
 	}
 
-	s.startScheduleJobsRefresh(ctx, 60*time.Second) // Refresh every minute
+	s.startScheduleJobsRefresh(s.context, 60*time.Second) // Refresh every minute
 	s.cron.Start()
+
+	// check dependencies resolution
+	s.depProbe.Start(s.context)
 
 	return nil
 }
 
 // Stop stops the scheduler service
 func (s *Scheduler) Stop() {
-	s.refreshCancel()
-	if s.refreshTicker != nil {
-		s.refreshTicker.Stop()
+	if !s.isRunning {
+		return
+	}
+
+	s.cancelFunc()
+	if s.ticker != nil {
+		s.ticker.Stop()
 	}
 
 	s.cron.Stop()
+	s.depProbe.Stop()
+	s.isRunning = false
 }
 
 func (s *Scheduler) startScheduleJobsRefresh(ctx context.Context, interval time.Duration) {
-	s.refreshTicker = time.NewTicker(interval)
+	s.ticker = time.NewTicker(interval)
 
 	go func() {
+		isRunning := false
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			case <-s.refreshContext.Done():
+			case <-s.context.Done():
 				return
-			case <-s.refreshTicker.C:
-				if err := s.RefreshSchedules(ctx); err != nil {
-					log.Error().Err(err).Msg("Failed to refresh schedules")
+			case <-s.ticker.C:
+				if isRunning {
+					continue
 				}
+
+				isRunning = true
+				go func() {
+					defer func() { isRunning = false }()
+					if err := s.RefreshSchedules(ctx); err != nil {
+						log.Error().Err(err).Msg("Failed to refresh schedules")
+					}
+				}()
 			}
 		}
 	}()
@@ -223,76 +246,25 @@ func (s *Scheduler) RemoveSchedule(scheduleID int64) {
 // scheduleJobExecution creates a new job execution record. After which, a message will be sent to
 // a distributed queue system to inform worker nodes to pick up the task.
 func (s *Scheduler) scheduleJobExecution(ctx context.Context, schedule Schedule) {
-	// Set initial status
-	var depsMetInitially bool
-	var err error
-
-	if schedule.HasDependencies() {
-		// Check if dependencies are satisfied
-		depsMetInitially, err = s.depProbe.CheckDependencies(ctx, schedule.Dependencies)
-		if err != nil {
-			log.Error().
-				Err(err).
-				Int64("job_id", schedule.JobID).
-				Msg("Failed to check dependencies")
-			return
-		}
-	} else {
-		// If no dependencies, mark as satisfied
-		depsMetInitially = true
-	}
-
 	// Insert execution record
 	query := `
 		INSERT INTO tasks.execution
-		(job_id, status, dependencies_met)
-		VALUES ($1, $2, $3)
+		(job_id, status)
+		VALUES ($1, $2)
 		RETURNING id, created_at
 	`
 
-	status := "pending"
-
 	var executionID int64
 	var createdAt time.Time
-	err = s.db.
-		QueryRowContext(ctx, query, schedule.JobID, status, depsMetInitially).
-		Scan(&executionID, &createdAt)
-
-	if err != nil {
+	if err := s.db.QueryRowContext(ctx, query, schedule.JobID, models.EsPending).Scan(&executionID, &createdAt); err != nil {
 		log.Error().
 			Err(err).
 			Int64("job_id", schedule.JobID).
 			Msg("Failed to create job execution")
 	}
 
-	if depsMetInitially && s.queue != nil {
-		msg := queue.TaskMessage{
-			ExecutionID: executionID,
-			JobID:       schedule.JobID,
-			Command:     schedule.Command,
-			ImageName:   schedule.ImageName.String,
-			Timeout:     schedule.TimeoutSeconds,
-			MaxRetries:  schedule.MaxRetries,
-			ScheduledAt: createdAt,
-		}
-
-		if err := s.queue.Publish(ctx, msg); err != nil {
-			log.Error().
-				Err(err).
-				Int64("job_id", schedule.JobID).
-				Int64("execution_id", executionID).
-				Msg("Failed to publish job to queue")
-		} else {
-			log.Info().
-				Int64("job_id", schedule.JobID).
-				Int64("execution_id", executionID).
-				Msg("Job scheduled and published to queue")
-		}
-	}
-
 	log.Info().
 		Int64("job_id", schedule.JobID).
 		Int64("execution_id", executionID).
-		Bool("dependencies_met", depsMetInitially).
 		Msg("Job execution scheduled")
 }

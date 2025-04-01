@@ -1,6 +1,7 @@
 package scheduler_test
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"github.com/guregu/null/v6"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/jmoiron/sqlx"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"jobrunner/internal/config"
 	"jobrunner/internal/models"
@@ -18,7 +20,26 @@ import (
 
 // The test database
 var db *sqlx.DB
-var rq queue.Client
+var rq *MockQueueClient
+
+type MockQueueClient struct {
+	mock.Mock
+}
+
+func (m *MockQueueClient) Publish(ctx context.Context, message queue.TaskMessage) error {
+	args := m.Called(ctx, message)
+	return args.Error(0)
+}
+
+func (m *MockQueueClient) Subscribe(ctx context.Context, handler func(queue.TaskMessage) error) error {
+	args := m.Called(ctx, handler)
+	return args.Error(0)
+}
+
+func (m *MockQueueClient) Close() error {
+	args := m.Called()
+	return args.Error(0)
+}
 
 func TestMain(m *testing.M) {
 	conf, err := config.LoadConfig()
@@ -31,10 +52,7 @@ func TestMain(m *testing.M) {
 		log.Fatalf("Failed to connect to test database: %v", err)
 	}
 
-	rq, err = queue.NewRedisClient(conf.Queue.Host, conf.Queue.Password, conf.Queue.DB)
-	if err != nil {
-		log.Fatalf("Failed to connect to test redis: %v", err)
-	}
+	rq = &MockQueueClient{}
 
 	defer func() {
 		err = db.Close()

@@ -86,8 +86,19 @@ func (dp *DependencyProbe) Start(ctx context.Context) {
 				isRunning = true
 				go func() {
 					defer func() { isRunning = false }()
-					if err := dp.checkPendingJobs(dp.context); err != nil {
-						log.Error().Err(err).Msg("Error checking pending jobs")
+					if pendingJobs, err := dp.FetchPendingJobs(dp.context); err != nil {
+						log.Error().Err(err).Msg("Error fetching pending jobs")
+					} else {
+						// Process each pending job
+						for _, job := range pendingJobs {
+							if err := dp.ProcessPendingJob(ctx, job); err != nil {
+								log.Error().
+									Err(err).
+									Int64("execution_id", job.ID).
+									Int64("job_id", job.JobID).
+									Msg("Error processing job")
+							}
+						}
 					}
 				}()
 			}
@@ -107,11 +118,11 @@ func (dp *DependencyProbe) Stop() {
 	dp.isRunning = false
 }
 
-// checkPendingJobs finds jobs with unsatisfied dependencies and checks if they're now satisfied.
+// FetchPendingJobs finds jobs with unsatisfied dependencies and checks if they're now satisfied.
 // If they are satisfied, sends a message to the queue for the workers to start working on them.
 // If they are not, check if they have "lapsed", gone past the maximum allowable wait time. If so,
 // mark those jobs as lapsed.
-func (dp *DependencyProbe) checkPendingJobs(ctx context.Context) error {
+func (dp *DependencyProbe) FetchPendingJobs(ctx context.Context) (pendingJobs []PendingJob, err error) {
 	// Find pending executions with unsatisfied dependencies
 	query := `
 		SELECT e.id, 
@@ -140,22 +151,15 @@ func (dp *DependencyProbe) checkPendingJobs(ctx context.Context) error {
 		WHERE e.status = 'pending'
 	`
 
-	var pendingJobs []PendingJob
-	if err := dp.db.SelectContext(ctx, &pendingJobs, query); err != nil {
-		return err
-	}
-
-	// Process each pending job
-	for _, job := range pendingJobs {
-		if err := dp.processPendingJob(ctx, job); err != nil {
-
-		}
-	}
-
-	return nil
+	err = dp.db.SelectContext(ctx, &pendingJobs, query)
+	return
 }
 
-func (dp *DependencyProbe) processPendingJob(ctx context.Context, job PendingJob) error {
+// ProcessPendingJob takes a job that is in pending state and processes it. In normal instances, this sends
+// the job information to the queue where a worker will pick it up and execute it. The routine also checks if
+// the job has "lapsed" (gone past its allowed start time). In those cases, it will mark the job as "lapsed"
+// in the database and stop processing it.
+func (dp *DependencyProbe) ProcessPendingJob(ctx context.Context, job PendingJob) error {
 	if err := json.Unmarshal(job.DependencyJSON, &job.Dependencies); err != nil {
 		log.Error().Err(err).Int64("execution_id", job.ID).Msg("Failed to parse dependencies")
 		return err
@@ -269,13 +273,9 @@ func (dp *DependencyProbe) CheckDependencies(ctx context.Context, dependencies [
 }
 
 func metDependencyCondition(condition models.RequiredCondition, status models.ExecutionStatus) bool {
-	switch {
-	case condition == models.RcSuccess && status == models.EsCompleted:
-	case condition == models.RcCompletion && (status == models.EsCompleted || status == models.EsFailed):
-	case condition == models.RcFailure && status == models.EsFailed:
-	case condition == models.RcCancelled && (status == models.EsCancelled):
-	case condition == models.RcLapsed && status == models.EsLapsed:
-		return true
-	}
-	return false
+	return (condition == models.RcSuccess && status == models.EsCompleted) ||
+		(condition == models.RcCompletion && (status == models.EsCompleted || status == models.EsFailed)) ||
+		(condition == models.RcFailure && status == models.EsFailed) ||
+		(condition == models.RcCancelled && (status == models.EsCancelled)) ||
+		(condition == models.RcLapsed && status == models.EsLapsed)
 }

@@ -36,6 +36,16 @@ type JobDependency struct {
 	MinWaitSeconds    int                      `db:"min_wait_seconds" json:"min_wait_seconds"`     // Extra time needed to wait after parent completion before job can run
 }
 
+// Equal checks if 2 JobDependency are the same
+func (j *JobDependency) Equal(other *JobDependency) bool {
+	return j.ID == other.ID &&
+		j.JobID == other.JobID &&
+		j.DependsOn == other.DependsOn &&
+		j.LookbackWindow == other.LookbackWindow &&
+		j.RequiredCondition == other.RequiredCondition &&
+		j.MinWaitSeconds == other.MinWaitSeconds
+}
+
 type PendingJob struct {
 	ID             int64           `db:"id"`              // Execution ID
 	JobID          int64           `db:"job_id"`          // Job ID

@@ -66,11 +66,7 @@ func compareDependencies(own []JobDependency, other []JobDependency) bool {
 
 	for key, ownDep := range ownMap {
 		otherDep, exists := otherMap[key]
-		if !exists ||
-			ownDep.JobID != otherDep.JobID ||
-			ownDep.DependsOn != otherDep.DependsOn ||
-			ownDep.MinWaitSeconds != otherDep.MinWaitSeconds ||
-			ownDep.RequiredCondition != otherDep.RequiredCondition {
+		if !exists || !ownDep.Equal(&otherDep) {
 			return false
 		}
 	}

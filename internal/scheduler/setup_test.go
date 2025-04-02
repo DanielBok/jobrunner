@@ -26,6 +26,10 @@ type MockQueueClient struct {
 	mock.Mock
 }
 
+func (m *MockQueueClient) RecoverStaleTasks(ctx context.Context) {
+	m.Called(ctx)
+}
+
 func (m *MockQueueClient) Publish(ctx context.Context, message queue.TaskMessage) error {
 	args := m.Called(ctx, message)
 	return args.Error(0)

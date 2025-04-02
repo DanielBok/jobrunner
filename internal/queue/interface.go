@@ -18,7 +18,12 @@ type TaskMessage struct {
 
 // Client defines the interface for task queue operations
 type Client interface {
+	// Publish sends a task message to the queue
 	Publish(ctx context.Context, message TaskMessage) error
+	// Subscribe starts listening for messages and processes them with the handler. One client can only be subscribed once
 	Subscribe(ctx context.Context, handler func(TaskMessage) error) error
+	// RecoverStaleTasks recovers stale tasks from workers that have died. This is a global operation.
+	RecoverStaleTasks(ctx context.Context)
+	// Close terminates the Client connection
 	Close() error
 }

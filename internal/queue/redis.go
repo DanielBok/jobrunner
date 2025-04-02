@@ -4,18 +4,24 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
+	"github.com/rs/zerolog/log"
 )
 
 const (
-	TaskQueueName = "jobrunner:tasks"
+	TaskQueueName       = "jobrunner:tasks"
+	DeadLetterQueueName = "jobrunner:tasks:dead"
 )
 
 // RedisClient implements Client using Redis
 type RedisClient struct {
-	client *redis.Client
+	client            *redis.Client
+	heartbeatInterval time.Duration
+	started           bool
 }
 
 // NewRedisClient creates a new Redis queue client
@@ -33,7 +39,7 @@ func NewRedisClient(addr, password string, db int) (*RedisClient, error) {
 		return nil, err
 	}
 
-	return &RedisClient{client: client}, nil
+	return &RedisClient{client: client, heartbeatInterval: 30, started: false}, nil
 }
 
 // Publish sends a task message to the queue
@@ -45,8 +51,26 @@ func (r *RedisClient) Publish(ctx context.Context, message TaskMessage) error {
 	return r.client.RPush(ctx, TaskQueueName, data).Err()
 }
 
-// Subscribe starts listening for messages and processes them with the handler
+// Subscribe starts listening for messages and processes them with the handler. One client can
+// only be subscribed once
 func (r *RedisClient) Subscribe(ctx context.Context, handler func(TaskMessage) error) error {
+	if r.started {
+		return errors.New("redis client already subscribed")
+	}
+
+	// Start heartbeat goroutine
+	heartbeatCtx, cancel := context.WithCancel(context.Background())
+	defer func() {
+		cancel()
+		r.started = false
+	}()
+
+	workerID := uuid.New().String()
+	processingKey := fmt.Sprintf("jobrunner:processing:%s", workerID)
+	r.started = true
+
+	go r.sendHeartbeat(heartbeatCtx, workerID)
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -66,16 +90,136 @@ func (r *RedisClient) Subscribe(ctx context.Context, handler func(TaskMessage) e
 				continue
 			}
 
+			messageData := []byte(result[1])
 			var message TaskMessage
-			if err := json.Unmarshal([]byte(result[1]), &message); err != nil {
+			if err := json.Unmarshal(messageData, &message); err != nil {
 				// Log error but continue processing
 				continue
 			}
 
-			// Process message
-			if err := handler(message); err != nil {
-				// Log error but continue processing
+			// Track that this task is being processed
+			// Store with TTL of 2x heartbeat interval
+			pipe := r.client.Pipeline()
+			pipe.HSet(ctx, processingKey, message.ExecutionID, messageData)
+			pipe.Expire(ctx, processingKey, r.heartbeatInterval*3)
+			if _, err := pipe.Exec(ctx); err != nil {
+				log.Error().Err(err).Msg("Failed to track processing task")
+				// Return message to queue
+				r.client.RPush(ctx, TaskQueueName, messageData)
 				continue
+			}
+
+			// Process message
+			err = processMessage(handler, message)
+
+			// Remove from processing list regardless of success/failure
+			r.client.HDel(ctx, processingKey, fmt.Sprintf("%d", message.ExecutionID))
+
+			if err != nil {
+				// On failure, send to dead letter queue with metadata
+				deadMsg := map[string]interface{}{
+					"message":   message,
+					"error":     err.Error(),
+					"timestamp": time.Now(),
+					"worker_id": workerID,
+				}
+				deadData, _ := json.Marshal(deadMsg)
+				r.client.RPush(ctx, DeadLetterQueueName, deadData)
+				log.Error().
+					Err(err).
+					Int64("execution_id", message.ExecutionID).
+					Msg("Task failed, sent to dead letter queue")
+			}
+		}
+	}
+}
+
+func processMessage(handler func(TaskMessage) error, message TaskMessage) (err error) {
+	defer func() {
+		if rcv := recover(); rcv != nil {
+			// Log the panic
+			log.Error().Interface("panic", rcv).Int64("execution_id", message.ExecutionID).Msg("Handler panicked")
+
+			err = fmt.Errorf("handler panicked: %v", rcv)
+		}
+	}()
+
+	return handler(message)
+}
+
+// sendHeartBeat periodically update TTL on processing tasks. This ensures that RecoverStaleTasks
+// does not pick up the tasks owned by this worker
+func (r *RedisClient) sendHeartbeat(ctx context.Context, workerID string) {
+	processingKey := fmt.Sprintf("jobrunner:processing:%s", workerID)
+	ticker := time.NewTicker(r.heartbeatInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			r.client.Expire(ctx, processingKey, r.heartbeatInterval*5)
+		}
+	}
+}
+
+// RecoverStaleTasks recovers stale tasks from workers that have died. This is a global operation.
+func (r *RedisClient) RecoverStaleTasks(ctx context.Context) {
+	ticker := time.NewTicker(r.heartbeatInterval * 2)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			// Find all processing lists
+			processingKeys, err := r.client.Keys(ctx, "jobrunner:processing:*").Result()
+			if err != nil {
+				log.Error().Err(err).Msg("Failed to scan for processing keys")
+				continue
+			}
+
+			for _, key := range processingKeys {
+				// Check if key still exists (might have expired)
+				ttl, err := r.client.TTL(ctx, key).Result()
+				if err != nil || ttl < 0 {
+					continue // Key doesn't exist or has no expiry
+				}
+
+				// By default, redis returns -2 if TTL has expired. In general, this shouldn't happen because
+				// sendHeartbeat updates every T seconds and refreshes the key for 3T and the check happens
+				// every 5T seconds. Given this, in normal circumstances, this check (if condition) wouldn't trigger.
+				// If it does (TTL is very low), it likely means worker might be dead.
+				if ttl < r.heartbeatInterval {
+					// Get all tasks from this worker
+					tasks, err := r.client.HGetAll(ctx, key).Result()
+					if err != nil {
+						continue
+					}
+
+					// Return tasks to the main queue
+					pipe := r.client.Pipeline()
+					for _, taskData := range tasks {
+						pipe.RPush(ctx, TaskQueueName, taskData)
+
+						// Log recovery
+						var msg TaskMessage
+						if err := json.Unmarshal([]byte(taskData), &msg); err == nil {
+							log.Info().
+								Int64("execution_id", msg.ExecutionID).
+								Str("worker", key).
+								Msg("Recovered stale task")
+						}
+					}
+
+					// Delete the processing key
+					pipe.Del(ctx, key)
+					if _, err := pipe.Exec(ctx); err != nil {
+						log.Error().Err(err).Msg("Failed to recover dead letter")
+					}
+				}
 			}
 		}
 	}

@@ -25,7 +25,7 @@ type RedisClient struct {
 }
 
 // NewRedisClient creates a new Redis queue client
-func NewRedisClient(addr, password string, db int) (*RedisClient, error) {
+func NewRedisClient(addr, password string, db int, heartbeatInterval int64) (*RedisClient, error) {
 	client := redis.NewClient(&redis.Options{
 		Addr:     addr,
 		Password: password,
@@ -39,7 +39,11 @@ func NewRedisClient(addr, password string, db int) (*RedisClient, error) {
 		return nil, err
 	}
 
-	return &RedisClient{client: client, heartbeatInterval: 30, started: false}, nil
+	return &RedisClient{
+		client:            client,
+		heartbeatInterval: time.Duration(heartbeatInterval) * time.Second,
+		started:           false,
+	}, nil
 }
 
 // Publish sends a task message to the queue
@@ -165,6 +169,7 @@ func (r *RedisClient) sendHeartbeat(ctx context.Context, workerID string) {
 }
 
 // RecoverStaleTasks recovers stale tasks from workers that have died. This is a global operation.
+// Still WIP
 func (r *RedisClient) RecoverStaleTasks(ctx context.Context) {
 	ticker := time.NewTicker(r.heartbeatInterval * 2)
 	defer ticker.Stop()
@@ -182,26 +187,46 @@ func (r *RedisClient) RecoverStaleTasks(ctx context.Context) {
 			}
 
 			for _, key := range processingKeys {
-				// Check if key still exists (might have expired)
 				ttl, err := r.client.TTL(ctx, key).Result()
-				if err != nil || ttl < 0 {
-					continue // Key doesn't exist or has no expiry
+				if err != nil {
+					log.Error().Err(err).Str("key", key).Msg("Failed to get TTL for processing key")
+					continue
 				}
 
-				// By default, redis returns -2 if TTL has expired. In general, this shouldn't happen because
-				// sendHeartbeat updates every T seconds and refreshes the key for 3T and the check happens
-				// every 5T seconds. Given this, in normal circumstances, this check (if condition) wouldn't trigger.
-				// If it does (TTL is very low), it likely means worker might be dead.
-				if ttl < r.heartbeatInterval {
+				// Key has no expiry
+				if ttl == -1 {
+					continue
+				}
+
+				// A key is considered stale if:
+				// 1. TTL is very low (less than half the heartbeat interval)
+				// 2. OR it will expire soon relative to our recovery cycle (2 * heartbeat interval)
+				// 3. The key "no longer exists" (expired)
+				staleThreshold := r.heartbeatInterval.Seconds() / 2
+				if ttl.Seconds() < staleThreshold || ttl == -2 {
+					log.Info().
+						Str("key", key).
+						Float64("ttl_seconds", ttl.Seconds()).
+						Float64("threshold", staleThreshold).
+						Msg("Found stale worker with low TTL")
+
 					// Get all tasks from this worker
 					tasks, err := r.client.HGetAll(ctx, key).Result()
 					if err != nil {
+						log.Error().Err(err).Str("key", key).Msg("Failed to get tasks for stale worker")
+						continue
+					}
+
+					// No tasks to recover
+					if len(tasks) == 0 {
+						log.Info().Str("key", key).Msg("Stale worker has no tasks to recover")
+						r.client.Del(ctx, key)
 						continue
 					}
 
 					// Return tasks to the main queue
 					pipe := r.client.Pipeline()
-					for _, taskData := range tasks {
+					for taskID, taskData := range tasks {
 						pipe.RPush(ctx, TaskQueueName, taskData)
 
 						// Log recovery
@@ -210,17 +235,30 @@ func (r *RedisClient) RecoverStaleTasks(ctx context.Context) {
 							log.Info().
 								Int64("execution_id", msg.ExecutionID).
 								Str("worker", key).
+								Str("task_id", taskID).
 								Msg("Recovered stale task")
+						} else {
+							log.Error().
+								Err(err).
+								Str("worker", key).
+								Str("task_id", taskID).
+								Msg("Failed to unmarshal recovered task")
 						}
 					}
 
 					// Delete the processing key
 					pipe.Del(ctx, key)
 					if _, err := pipe.Exec(ctx); err != nil {
-						log.Error().Err(err).Msg("Failed to recover dead letter")
+						log.Error().Err(err).Str("key", key).Msg("Failed to recover tasks from stale worker")
+					} else {
+						log.Info().
+							Str("key", key).
+							Int("task_count", len(tasks)).
+							Msg("Successfully recovered tasks from stale worker")
 					}
 				}
 			}
+
 		}
 	}
 }

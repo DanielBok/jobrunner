@@ -15,7 +15,7 @@ import (
 	"jobrunner/internal/queue"
 )
 
-// DependencyProbe is used to check if a JobSchedule has all its dependencies met
+// DependencyProbe is used to check if a TaskSchedule has all its dependencies met
 type DependencyProbe struct {
 	db    *sqlx.DB     // Database connection
 	queue queue.Client // Queue to pass message to worker nodes
@@ -27,35 +27,35 @@ type DependencyProbe struct {
 	cancelFunc context.CancelFunc
 }
 
-type JobDependency struct {
-	ID                int64                    `db:"id" json:"id"`                                 // Job Dependency ID
-	JobID             int64                    `db:"job_id" json:"job_id"`                         // Job ID
-	DependsOn         int64                    `db:"depends_on" json:"depends_on"`                 // The parent which must be "completed" before this job can run
+type TaskDependency struct {
+	ID                int64                    `db:"id" json:"id"`                                 // Task Dependency ID
+	TaskID            int64                    `db:"task_id" json:"task_id"`                       // Task ID
+	DependsOn         int64                    `db:"depends_on" json:"depends_on"`                 // The parent which must be "completed" before this task can run
 	LookbackWindow    int                      `db:"lookback_window" json:"lookback_window"`       // How far back (in seconds) to lookback for the "complete" condition
 	RequiredCondition models.RequiredCondition `db:"required_condition" json:"required_condition"` // The type of completion required to say dependency is met
-	MinWaitSeconds    int                      `db:"min_wait_seconds" json:"min_wait_seconds"`     // Extra time needed to wait after parent completion before job can run
+	MinWaitSeconds    int                      `db:"min_wait_seconds" json:"min_wait_seconds"`     // Extra time needed to wait after parent completion before task can run
 }
 
-// Equal checks if 2 JobDependency are the same
-func (j *JobDependency) Equal(other *JobDependency) bool {
+// Equal checks if 2 TaskDependency are the same
+func (j *TaskDependency) Equal(other *TaskDependency) bool {
 	return j.ID == other.ID &&
-		j.JobID == other.JobID &&
+		j.TaskID == other.TaskID &&
 		j.DependsOn == other.DependsOn &&
 		j.LookbackWindow == other.LookbackWindow &&
 		j.RequiredCondition == other.RequiredCondition &&
 		j.MinWaitSeconds == other.MinWaitSeconds
 }
 
-type PendingJob struct {
-	ID             int64           `db:"id"`              // Execution ID
-	JobID          int64           `db:"job_id"`          // Job ID
-	Command        string          `db:"command"`         // Command to run for job
-	ImageName      null.String     `db:"image_name"`      // The docker image name. If provided, will run the task in docker
-	TimeoutSeconds int             `db:"timeout_seconds"` // The maximum time that the job can stay in the "running" execution status
-	MaxRetries     int             `db:"max_retries"`     // Number of times the job can retry
-	CreatedAt      time.Time       `db:"created_at"`      // Time the execution was created
-	Dependencies   []JobDependency `db:"-"`               // Job dependencies
-	DependencyJSON []byte          `db:"dependencies"`
+type PendingTask struct {
+	ID             int64            `db:"id"`              // Execution ID
+	TaskID         int64            `db:"task_id"`         // Task ID
+	Command        string           `db:"command"`         // Command to run for task
+	ImageName      null.String      `db:"image_name"`      // The docker image name. If provided, will run the task in docker
+	TimeoutSeconds int              `db:"timeout_seconds"` // The maximum time that the task can stay in the "running" execution status
+	MaxRetries     int              `db:"max_retries"`     // Number of times the task can retry
+	CreatedAt      time.Time        `db:"created_at"`      // Time the execution was created
+	Dependencies   []TaskDependency `db:"-"`               // Task dependencies
+	DependencyJSON []byte           `db:"dependencies"`
 }
 
 // NewDependencyProbe creates a new dependency resolver.
@@ -70,7 +70,7 @@ func NewDependencyProbe(db *sqlx.DB, queue queue.Client) *DependencyProbe {
 	}
 }
 
-// Start will trigger the probe to scan continuously for jobs that are pending and
+// Start will trigger the probe to scan continuously for tasks that are pending and
 // check that their dependencies are all met
 func (dp *DependencyProbe) Start(ctx context.Context) {
 	if dp.isRunning {
@@ -96,17 +96,17 @@ func (dp *DependencyProbe) Start(ctx context.Context) {
 				isRunning = true
 				go func() {
 					defer func() { isRunning = false }()
-					if pendingJobs, err := dp.FetchPendingJobs(dp.context); err != nil {
-						log.Error().Err(err).Msg("Error fetching pending jobs")
+					if pendingTasks, err := dp.FetchPendingTasks(dp.context); err != nil {
+						log.Error().Err(err).Msg("Error fetching pending tasks")
 					} else {
-						// Process each pending job
-						for _, job := range pendingJobs {
-							if err := dp.ProcessPendingJob(ctx, job); err != nil {
+						// Process each pending task
+						for _, task := range pendingTasks {
+							if err := dp.ProcessPendingTask(ctx, task); err != nil {
 								log.Error().
 									Err(err).
-									Int64("execution_id", job.ID).
-									Int64("job_id", job.JobID).
-									Msg("Error processing job")
+									Int64("execution_id", task.ID).
+									Int64("task_id", task.TaskID).
+									Msg("Error processing task")
 							}
 						}
 					}
@@ -128,131 +128,131 @@ func (dp *DependencyProbe) Stop() {
 	dp.isRunning = false
 }
 
-// FetchPendingJobs finds jobs with unsatisfied dependencies and checks if they're now satisfied.
+// FetchPendingTasks finds tasks with unsatisfied dependencies and checks if they're now satisfied.
 // If they are satisfied, sends a message to the queue for the workers to start working on them.
 // If they are not, check if they have "lapsed", gone past the maximum allowable wait time. If so,
-// mark those jobs as lapsed.
-func (dp *DependencyProbe) FetchPendingJobs(ctx context.Context) (pendingJobs []PendingJob, err error) {
+// mark those tasks as lapsed.
+func (dp *DependencyProbe) FetchPendingTasks(ctx context.Context) (pendingTasks []PendingTask, err error) {
 	// Find pending executions with unsatisfied dependencies
 	query := `
-		SELECT e.id, 
-		       e.job_id, 
-		       j.command, 
-		       j.image_name, 
-		       j.timeout_seconds, 
-		       j.max_retries, 
-		       e.created_at,
+		SELECT r.id, 
+		       r.task_id, 
+		       d.command, 
+		       d.image_name, 
+		       d.timeout_seconds, 
+		       d.max_retries, 
+		       r.created_at,
 		       COALESCE(
 			       (SELECT JSONB_AGG(
 						   JSONB_BUILD_OBJECT(
 							   'id', dep.id,
-							   'job_id', dep.job_id,
+							   'task_id', dep.task_id,
 							   'depends_on', dep.depends_on,
 							   'lookback_window', dep.lookback_window,
 							   'required_condition', dep.required_condition,
 							   'min_wait_seconds', dep.min_wait_time
 						   )
 				       )
-				   FROM tasks.dependency dep
-				   WHERE dep.job_id = j.id), '[]'::jsonb
+				   FROM task.dependency dep
+				   WHERE dep.task_id = d.id), '[]'::JSONB
 		       ) AS dependencies
-		FROM tasks.execution e
-		JOIN tasks.job j ON e.job_id = j.id
-		WHERE e.status = 'pending'
+		FROM task.run r
+		JOIN task.definition d ON r.task_id = d.id
+		WHERE r.status = 'pending'
 	`
 
-	err = dp.db.SelectContext(ctx, &pendingJobs, query)
+	err = dp.db.SelectContext(ctx, &pendingTasks, query)
 	return
 }
 
-// ProcessPendingJob takes a job that is in pending state and processes it. In normal instances, this sends
-// the job information to the queue where a worker will pick it up and execute it. The routine also checks if
-// the job has "lapsed" (gone past its allowed start time). In those cases, it will mark the job as "lapsed"
+// ProcessPendingTask takes a task that is in pending state and processes it. In normal instances, this sends
+// the task information to the queue where a worker will pick it up and execute it. The routine also checks if
+// the task has "lapsed" (gone past its allowed start time). In those cases, it will mark the task as "lapsed"
 // in the database and stop processing it.
-func (dp *DependencyProbe) ProcessPendingJob(ctx context.Context, job PendingJob) error {
-	if err := json.Unmarshal(job.DependencyJSON, &job.Dependencies); err != nil {
-		log.Error().Err(err).Int64("execution_id", job.ID).Msg("Failed to parse dependencies")
+func (dp *DependencyProbe) ProcessPendingTask(ctx context.Context, task PendingTask) error {
+	if err := json.Unmarshal(task.DependencyJSON, &task.Dependencies); err != nil {
+		log.Error().Err(err).Int64("execution_id", task.ID).Msg("Failed to parse dependencies")
 		return err
 	}
 
-	// Check if the job has gone pass the cutoff time. If so, mark the job as lapsed and don't work on it anymore
-	// To derive the cutoff time, take the time the job was first scheduled (created_at) and add the dependency's
+	// Check if the task has gone pass the cutoff time. If so, mark the task as lapsed and don't work on it anymore
+	// To derive the cutoff time, take the time the task was first scheduled (created_at) and add the dependency's
 	// LookbackWindow (seconds). For example, if the execution request was first created at 01:00, and the
 	// LookbackWindow is 3600 seconds, then the cutoff time is 02:00. If the dependency is still not met at 02:00,
-	// then the job is marked as "lapsed" and will not be executed anymore.
+	// then the task is marked as "lapsed" and will not be executed anymore.
 	now := time.Now()
-	for _, dep := range job.Dependencies {
-		cutoffTime := job.CreatedAt.Add(time.Duration(dep.LookbackWindow) * time.Second)
+	for _, dep := range task.Dependencies {
+		cutoffTime := task.CreatedAt.Add(time.Duration(dep.LookbackWindow) * time.Second)
 		if now.After(cutoffTime) {
 			query := `
-				UPDATE tasks.execution
+				UPDATE task.run
 				SET status = $1
 				WHERE id = $2
 			`
-			_, err := dp.db.ExecContext(ctx, query, models.EsLapsed, job.ID)
+			_, err := dp.db.ExecContext(ctx, query, models.RsLapsed, task.ID)
 			if err != nil {
-				log.Error().Err(err).Int64("execution_id", job.ID).Msg("Failed to mark lapsed execution")
-				return errors.New("could not mark job as lapsed")
+				log.Error().Err(err).Int64("execution_id", task.ID).Msg("Failed to mark lapsed execution")
+				return errors.New("could not mark task as lapsed")
 			}
 
-			return fmt.Errorf("could not mark job as 'lapsed'. %w", err)
+			return fmt.Errorf("could not mark task as 'lapsed'. %w", err)
 		}
 	}
 
 	// Check if dependencies are now satisfied
-	depsMet, err := dp.CheckDependencies(ctx, job.Dependencies)
+	depsMet, err := dp.CheckDependencies(ctx, task.Dependencies)
 	if err != nil {
-		log.Error().Err(err).Int64("execution_id", job.ID).Msg("Failed to check dependencies")
+		log.Error().Err(err).Int64("execution_id", task.ID).Msg("Failed to check dependencies")
 		return err
 	}
 
-	// If dependencies are met, send a message to the queue notifying that a job is ready to be done
+	// If dependencies are met, send a message to the queue notifying that a task is ready to be done
 	if depsMet {
 		// Send to queue
 		message := queue.TaskMessage{
-			ExecutionID: job.ID,
-			JobID:       job.JobID,
-			Command:     job.Command,
-			ImageName:   job.ImageName.String,
-			Timeout:     job.TimeoutSeconds,
-			MaxRetries:  job.MaxRetries,
-			ScheduledAt: job.CreatedAt,
+			ExecutionID: task.ID,
+			TaskID:      task.TaskID,
+			Command:     task.Command,
+			ImageName:   task.ImageName.String,
+			Timeout:     task.TimeoutSeconds,
+			MaxRetries:  task.MaxRetries,
+			ScheduledAt: task.CreatedAt,
 		}
 
 		if err := dp.queue.Publish(ctx, message); err != nil {
-			log.Error().Err(err).Int64("execution_id", job.ID).Msg("Failed to publish to queue")
+			log.Error().Err(err).Int64("execution_id", task.ID).Msg("Failed to publish to queue")
 			return err
 		}
 
-		log.Info().Int64("execution_id", job.ID).Msg("Dependencies satisfied, job published to queue")
+		log.Info().Int64("execution_id", task.ID).Msg("Dependencies satisfied, task published to queue")
 	}
 	return nil
 }
 
-// CheckDependencies verifies if all dependencies for a job execution are satisfied
-func (dp *DependencyProbe) CheckDependencies(ctx context.Context, dependencies []JobDependency) (bool, error) {
+// CheckDependencies verifies if all dependencies for a task execution are satisfied
+func (dp *DependencyProbe) CheckDependencies(ctx context.Context, dependencies []TaskDependency) (bool, error) {
 	if len(dependencies) == 0 {
 		return true, nil
 	}
 
 	var params []interface{}
 	var clauses []string
-	depMap := make(map[int64]JobDependency)
+	depMap := make(map[int64]TaskDependency)
 	for _, d := range dependencies {
-		clauses = append(clauses, "(job_id = ? AND end_time > NOW() - MAKE_INTERVAL(secs => ?))")
+		clauses = append(clauses, "(task_id = ? AND end_time > NOW() - MAKE_INTERVAL(secs => ?))")
 		params = append(params, d.DependsOn, d.LookbackWindow)
 		depMap[d.DependsOn] = d
 	}
 
 	query := dp.db.Rebind(fmt.Sprintf(`
-	SELECT DISTINCT ON (job_id)
-	    id, job_id, status, start_time, end_time, exit_code, output, error, attempts, worker_id
-	FROM tasks.execution
+	SELECT DISTINCT ON (task_id)
+	    id, task_id, status, start_time, end_time, exit_code, output, error, attempts, worker_id
+	FROM task.run
 	WHERE %s
-	ORDER BY job_id, end_time DESC NULLS LAST
+	ORDER BY task_id, end_time DESC NULLS LAST
 	`, strings.Join(clauses, " OR ")))
 
-	var parentExecutions []JobExecution
+	var parentExecutions []TaskRun
 	err := dp.db.SelectContext(ctx, &parentExecutions, query, params...)
 	if err != nil {
 		return false, err
@@ -264,9 +264,9 @@ func (dp *DependencyProbe) CheckDependencies(ctx context.Context, dependencies [
 
 	now := time.Now()
 
-	// Check that all job execution's exit code meets the
+	// Check that all task execution's exit code meets the
 	for _, ex := range parentExecutions {
-		parent := depMap[ex.JobId]
+		parent := depMap[ex.TaskID]
 
 		// If the EndTime is not Valid or the EndTime is before the latest acceptable time
 		if !ex.EndTime.Valid ||
@@ -282,10 +282,10 @@ func (dp *DependencyProbe) CheckDependencies(ctx context.Context, dependencies [
 	return true, nil
 }
 
-func metDependencyCondition(condition models.RequiredCondition, status models.ExecutionStatus) bool {
-	return (condition == models.RcSuccess && status == models.EsCompleted) ||
-		(condition == models.RcCompletion && (status == models.EsCompleted || status == models.EsFailed)) ||
-		(condition == models.RcFailure && status == models.EsFailed) ||
-		(condition == models.RcCancelled && (status == models.EsCancelled)) ||
-		(condition == models.RcLapsed && status == models.EsLapsed)
+func metDependencyCondition(condition models.RequiredCondition, status models.RunStatus) bool {
+	return (condition == models.RcSuccess && status == models.RsCompleted) ||
+		(condition == models.RcCompletion && (status == models.RsCompleted || status == models.RsFailed)) ||
+		(condition == models.RcFailure && status == models.RsFailed) ||
+		(condition == models.RcCancelled && (status == models.RsCancelled)) ||
+		(condition == models.RcLapsed && status == models.RsLapsed)
 }

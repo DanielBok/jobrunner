@@ -55,7 +55,7 @@ package server
 //			//r.Delete("/{scheduleID}", s.deleteSchedule)
 //		})
 //
-//		// Job executions endpoints
+//		// Task executions endpoints
 //		r.Route("/executions", func(r chi.Router) {
 //			//r.Get("/job/{jobID}", s.getJobExecutions)
 //			//r.Get("/{executionID}", s.getExecution)
@@ -106,7 +106,7 @@ package server
 //
 //// List all jobs
 //func (s *Server) listJobs(w http.ResponseWriter, r *http.Request) {
-//	var jobs []models.Job
+//	var jobs []models.Task
 //
 //	err := s.db.Select(&jobs, `SELECT * FROM jobs ORDER BY id DESC`)
 //	if err != nil {
@@ -125,11 +125,11 @@ package server
 //		return
 //	}
 //
-//	var job models.Job
+//	var job models.Task
 //	err = s.db.Get(&job, `SELECT * FROM jobs WHERE id = $1`, jobID)
 //	if err != nil {
 //		if err == sql.ErrNoRows {
-//			respondError(w, http.StatusNotFound, "Job not found")
+//			respondError(w, http.StatusNotFound, "Task not found")
 //		} else {
 //			respondError(w, http.StatusInternalServerError, "Failed to get job")
 //		}
@@ -141,7 +141,7 @@ package server
 //
 //// Create a new job
 //func (s *Server) createJob(w http.ResponseWriter, r *http.Request) {
-//	var job models.Job
+//	var job models.Task
 //	if err := json.NewDecoder(r.Body).Decode(&job); err != nil {
 //		respondError(w, http.StatusBadRequest, "Invalid request body")
 //		return
@@ -197,7 +197,7 @@ package server
 //		return
 //	}
 //
-//	var job models.Job
+//	var job models.Task
 //	if err := json.NewDecoder(r.Body).Decode(&job); err != nil {
 //		respondError(w, http.StatusBadRequest, "Invalid request body")
 //		return

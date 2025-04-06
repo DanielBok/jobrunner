@@ -8,40 +8,40 @@ import (
 	"github.com/robfig/cron/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	jrs "jobrunner/internal/scheduler"
+	"jobrunner/internal/scheduler"
 )
 
 func TestGetAllSchedules(t *testing.T) {
 	// Create a new mock database
 	clearTestDB(t)
-	scheduler := jrs.NewScheduler(db, nil)
+	taskScheduler := scheduler.NewTaskScheduler(db, nil)
 	idMap := preloadTestDB(t)
 
 	// Call the function
-	jobs, err := scheduler.GetAllSchedules(context.Background())
+	tasks, err := taskScheduler.GetAllSchedules(context.Background())
 	assert.NoError(t, err)
-	assert.Len(t, jobs, 6)
+	assert.Len(t, tasks, 6)
 
-	//Verify first job
-	assert.Equal(t, jobs[0].JobName, "Job 1")
-	assert.Len(t, jobs[0].Dependencies, 0)
+	//Verify first task
+	assert.Equal(t, tasks[0].TaskName, "Task 1")
+	assert.Len(t, tasks[0].Dependencies, 0)
 
-	// Verify second Job
-	assert.Equal(t, jobs[1].JobName, "Job 2")
-	assert.Len(t, jobs[1].Dependencies, 1)
-	assert.ElementsMatch(t, []int64{idMap[1]}, jobs[1].ParentIDs(), "Job 2 should depend on Job 1")
+	// Verify second Task
+	assert.Equal(t, tasks[1].TaskName, "Task 2")
+	assert.Len(t, tasks[1].Dependencies, 1)
+	assert.ElementsMatch(t, []int64{idMap[1]}, tasks[1].ParentIDs(), "Task 2 should depend on Task 1")
 
-	// Verify third Job. Third Job has 4 schedules
-	for i := 2; i < len(jobs); i++ {
-		job := jobs[i]
-		assert.Equal(t, job.JobName, "Job 3")
-		assert.Len(t, job.Dependencies, 2)
+	// Verify third Task. Third Task has 4 schedules
+	for i := 2; i < len(tasks); i++ {
+		task := tasks[i]
+		assert.Equal(t, task.TaskName, "Task 3")
+		assert.Len(t, task.Dependencies, 2)
 
-		assert.ElementsMatch(t, []int64{idMap[1], idMap[2]}, job.ParentIDs(), "Job 3 should depend on Jobs 1 and 2")
+		assert.ElementsMatch(t, []int64{idMap[1], idMap[2]}, task.ParentIDs(), "Task 3 should depend on Tasks 1 and 2")
 	}
 }
 
-// Create the job and schedule
+// Create the task and schedule
 func TestTimezoneScheduling(t *testing.T) {
 	c := cron.New(cron.WithLocation(time.UTC))
 	c.Start()
@@ -66,25 +66,25 @@ func TestAddAndRemoveSchedule(t *testing.T) {
 	clearTestDB(t)
 	preloadTestDB(t)
 
-	scheduler := jrs.NewScheduler(db, nil)
+	taskScheduler := scheduler.NewTaskScheduler(db, nil)
 
 	// Ensure we're starting clean
-	scheduler.RemoveSchedule(1)
-	scheduler.RemoveSchedule(2)
-	scheduler.RemoveSchedule(3)
+	taskScheduler.RemoveSchedule(1)
+	taskScheduler.RemoveSchedule(2)
+	taskScheduler.RemoveSchedule(3)
 
 	// Get test data from the database
 	ctx := context.Background()
-	allSchedules, err := scheduler.GetAllSchedules(ctx)
+	allSchedules, err := taskScheduler.GetAllSchedules(ctx)
 	require.NoError(t, err)
 	require.NotEmpty(t, allSchedules, "Need test data to proceed")
 
 	for _, sch := range allSchedules {
-		err := scheduler.AddSchedule(ctx, sch)
+		err := taskScheduler.AddSchedule(ctx, sch)
 		assert.NoError(t, err, "Should add schedule without error")
 	}
 
 	for _, sch := range allSchedules {
-		scheduler.RemoveSchedule(sch.ScheduleID)
+		taskScheduler.RemoveSchedule(sch.ScheduleID)
 	}
 }

@@ -8,8 +8,8 @@ import (
 
 // This file contains all the models under the `tasks` schema
 
-// TasksJob is a models representing the `tasks.job` table
-type TasksJob struct {
+// TaskDefinition is a models representing the `tasks.definition` table
+type TaskDefinition struct {
 	ID             int64       `db:"id"`
 	Name           string      `db:"name"`
 	Description    null.String `db:"description"`
@@ -32,10 +32,10 @@ const (
 	RcLapsed     RequiredCondition = "lapsed"
 )
 
-// TasksDependency is a models representing the `tasks.dependency` table
-type TasksDependency struct {
+// TaskDependency is a models representing the `tasks.dependency` table
+type TaskDependency struct {
 	ID                int64             `db:"id"`
-	JobID             int64             `db:"job_id"`
+	TaskID            int64             `db:"task_id"`
 	DependsOn         int64             `db:"depends_on"`
 	LookbackWindow    int               `db:"lookback_window"`
 	MinWaitTime       int               `db:"min_wait_time"`
@@ -44,37 +44,38 @@ type TasksDependency struct {
 	UpdatedAt         time.Time         `db:"updated_at"`
 }
 
-// TasksSchedule is a models representing the `tasks.schedule` table
-type TasksSchedule struct {
+// TaskSchedule is a models representing the `tasks.schedule` table
+type TaskSchedule struct {
 	ID             int64     `db:"id"`
-	JobID          int64     `db:"job_id"`
+	TaskID         int64     `db:"task_id"`
 	CronExpression string    `db:"cron_expression"`
 	Timezone       string    `db:"timezone"`
 	CreatedAt      time.Time `db:"created_at"`
 	UpdatedAt      time.Time `db:"updated_at"`
 }
 
-type ExecutionStatus string
+type RunStatus string
 
 const (
-	EsPending   ExecutionStatus = "pending"
-	EsRunning   ExecutionStatus = "running"
-	EsCompleted ExecutionStatus = "completed"
-	EsFailed    ExecutionStatus = "failed"
-	EsCancelled ExecutionStatus = "cancelled"
-	EsLapsed    ExecutionStatus = "lapsed"
+	RsPending   RunStatus = "pending"
+	RsRunning   RunStatus = "running"
+	RsCompleted RunStatus = "completed"
+	RsFailed    RunStatus = "failed"
+	RsCancelled RunStatus = "cancelled"
+	RsLapsed    RunStatus = "lapsed"
 )
 
-type TasksExecution struct {
-	ID        int64           `db:"id"`
-	JobID     int64           `db:"job_id"`
-	Status    ExecutionStatus `db:"status"`
-	StartTime null.Time       `db:"start_time"`
-	EndTime   null.Time       `db:"end_time"`
-	ExitCode  int             `db:"exit_code"`
-	Output    null.String     `db:"output"`
-	Error     null.String     `db:"error"`
-	Attempts  int             `db:"attempts"`
-	WorkerId  null.String     `db:"worker_id"`
-	CreatedAt time.Time       `db:"created_at"`
+type TaskRun struct {
+	ID            int64       `db:"id"`
+	TaskID        int64       `db:"task_id"`
+	Status        RunStatus   `db:"status"`
+	StartTime     null.Time   `db:"start_time"`
+	EndTime       null.Time   `db:"end_time"`
+	ExitCode      int         `db:"exit_code"`
+	Output        null.String `db:"output"`
+	Error         null.String `db:"error"`
+	Attempts      int         `db:"attempts"`
+	WorkerId      null.String `db:"worker_id"`
+	LastHeartbeat null.Time   `db:"last_heartbeat"`
+	CreatedAt     time.Time   `db:"created_at"`
 }

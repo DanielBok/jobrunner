@@ -15,10 +15,10 @@ import (
 
 type ScheduledCronJob struct {
 	EntryID cron.EntryID
-	Job     Schedule
+	Task    Schedule
 }
 
-type Scheduler struct {
+type TaskScheduler struct {
 	db               *sqlx.DB
 	cron             *cron.Cron
 	depProbe         *DependencyProbe
@@ -32,15 +32,15 @@ type Scheduler struct {
 	cancelFunc context.CancelFunc
 }
 
-// NewScheduler creates a new scheduler service
-func NewScheduler(db *sqlx.DB, queue queue.Client) *Scheduler {
+// NewTaskScheduler creates a new scheduler service
+func NewTaskScheduler(db *sqlx.DB, queue queue.Client) *TaskScheduler {
 	// Create cron with seconds precision
 	c := cron.New(
 		cron.WithParser(cron.NewParser(cron.SecondOptional|cron.Minute|cron.Hour|cron.Dom|cron.Month|cron.Dow)),
 		cron.WithLocation(time.UTC),
 	)
 
-	return &Scheduler{
+	return &TaskScheduler{
 		db:               db,
 		cron:             c,
 		depProbe:         NewDependencyProbe(db, queue),
@@ -51,7 +51,7 @@ func NewScheduler(db *sqlx.DB, queue queue.Client) *Scheduler {
 }
 
 // Start begins the scheduler service
-func (s *Scheduler) Start(ctx context.Context) error {
+func (s *TaskScheduler) Start(ctx context.Context) error {
 	if s.isRunning {
 		return nil
 	}
@@ -64,7 +64,7 @@ func (s *Scheduler) Start(ctx context.Context) error {
 		return err
 	}
 
-	s.startScheduleJobsRefresh(s.context, 60*time.Second) // Refresh every minute
+	s.startScheduleTasksRefresh(s.context, 60*time.Second) // Refresh every minute
 	s.cron.Start()
 
 	// check dependencies resolution
@@ -74,7 +74,7 @@ func (s *Scheduler) Start(ctx context.Context) error {
 }
 
 // Stop stops the scheduler service
-func (s *Scheduler) Stop() {
+func (s *TaskScheduler) Stop() {
 	if !s.isRunning {
 		return
 	}
@@ -89,7 +89,7 @@ func (s *Scheduler) Stop() {
 	s.isRunning = false
 }
 
-func (s *Scheduler) startScheduleJobsRefresh(ctx context.Context, interval time.Duration) {
+func (s *TaskScheduler) startScheduleTasksRefresh(ctx context.Context, interval time.Duration) {
 	s.ticker = time.NewTicker(interval)
 
 	go func() {
@@ -117,9 +117,9 @@ func (s *Scheduler) startScheduleJobsRefresh(ctx context.Context, interval time.
 	}()
 }
 
-// RefreshSchedules reloads all schedules and updates cron jobs
-func (s *Scheduler) RefreshSchedules(ctx context.Context) error {
-	log.Info().Msg("Refreshing job schedules...")
+// RefreshSchedules reloads all schedules and updates cron tasks
+func (s *TaskScheduler) RefreshSchedules(ctx context.Context) error {
+	log.Info().Msg("Refreshing task schedules...")
 
 	//Get all schedules
 	schedules, err := s.GetAllSchedules(ctx)
@@ -132,15 +132,15 @@ func (s *Scheduler) RefreshSchedules(ctx context.Context) error {
 
 		switch {
 		case !exists && schedule.IsActive:
-			// Does not exist and is active, add to scheduled cron job
+			// Does not exist and is active, add to scheduled cron task
 			if err := s.AddSchedule(ctx, schedule); err != nil {
 				return err
 			}
 		case !schedule.IsActive:
-			// Job exists in cron but is no longer active, remove
+			// Task exists in cron but is no longer active, remove
 			s.RemoveSchedule(schedule.ScheduleID)
-		case !schedule.Equal(&sc.Job):
-			// jobs are not the same even though they have the same ScheduleID
+		case !schedule.Equal(&sc.Task):
+			// tasks are not the same even though they have the same ScheduleID
 			// this means that the Schedule has been updated
 			s.RemoveSchedule(schedule.ScheduleID)
 			if err := s.AddSchedule(ctx, schedule); err != nil {
@@ -153,12 +153,12 @@ func (s *Scheduler) RefreshSchedules(ctx context.Context) error {
 	return nil
 }
 
-// GetAllSchedules fetches all the schedules. Note that a single job can
+// GetAllSchedules fetches all the schedules. Note that a single tasks can
 // have multiple schedules.
-func (s *Scheduler) GetAllSchedules(ctx context.Context) ([]Schedule, error) {
+func (s *TaskScheduler) GetAllSchedules(ctx context.Context) ([]Schedule, error) {
 	var schedules []Schedule
 	query := `
-SELECT s.job_id,
+SELECT s.task_id,
        s.id AS schedule_id,
        j.name,
        j.image_name,
@@ -171,19 +171,19 @@ SELECT s.job_id,
                (SELECT JSONB_AGG(
                                JSONB_BUILD_OBJECT(
                                        'id', dep.id,
-                                       'job_id', dep.job_id,
+                                       'task_id', dep.task_id,
                                        'depends_on', dep.depends_on,
                                        'lookback_window', dep.lookback_window,
                                        'required_condition', dep.required_condition,
                                        'min_wait_seconds', dep.min_wait_time
                                )
                        )
-                FROM tasks.dependency dep
-                WHERE dep.job_id = j.id), '[]'::jsonb
+                FROM task.dependency dep
+                WHERE dep.task_id = j.id), '[]'::JSONB
        ) AS dependencies
-FROM tasks.job j
-LEFT JOIN tasks.schedule s ON s.job_id = j.id
-ORDER BY job_id, schedule_id`
+FROM task.definition j
+LEFT JOIN task.schedule s ON s.task_id = j.id
+ORDER BY task_id, schedule_id`
 
 	if err := s.db.SelectContext(ctx, &schedules, query); err != nil {
 		return nil, err
@@ -202,35 +202,35 @@ ORDER BY job_id, schedule_id`
 }
 
 // AddSchedule adds a Schedule into the cron scheduler
-func (s *Scheduler) AddSchedule(ctx context.Context, schedule Schedule) error {
-	// Create a job-specific context that can be cancelled when the job is removed
-	// Add the job to cron with the proper timezone
+func (s *TaskScheduler) AddSchedule(ctx context.Context, schedule Schedule) error {
+	// Create a task-specific context that can be cancelled when the task is removed
+	// Add the task to cron with the proper timezone
 	entryID, err := s.cron.AddFunc(schedule.CronExpression, func() {
 		if ctx.Err() != nil {
 			return // Context cancelled
 		}
-		s.scheduleJobExecution(ctx, schedule)
+		s.scheduleTaskRun(ctx, schedule)
 	})
 
 	if err != nil {
 		log.Error().
 			Err(err).
-			Int64("job_id", schedule.JobID).
+			Int64("task_id", schedule.TaskID).
 			Str("cron", schedule.CronExpression).
-			Msg("Failed to schedule job")
+			Msg("Failed to schedule task")
 		return err
 	}
 
 	// Store the entry ID
 	s.scheduleMapMutex.Lock()
-	s.scheduleIDMap[schedule.JobID] = ScheduledCronJob{entryID, schedule}
+	s.scheduleIDMap[schedule.TaskID] = ScheduledCronJob{entryID, schedule}
 	s.scheduleMapMutex.Unlock()
 
 	return nil
 }
 
 // RemoveSchedule removes a Schedule from the cron scheduler
-func (s *Scheduler) RemoveSchedule(scheduleID int64) {
+func (s *TaskScheduler) RemoveSchedule(scheduleID int64) {
 	s.scheduleMapMutex.Lock()
 	defer s.scheduleMapMutex.Unlock()
 
@@ -239,32 +239,32 @@ func (s *Scheduler) RemoveSchedule(scheduleID int64) {
 		delete(s.scheduleIDMap, scheduleID)
 		log.Info().
 			Int64("schedule_id", scheduleID).
-			Msg("Removed job schedule")
+			Msg("Removed task schedule")
 	}
 }
 
-// scheduleJobExecution creates a new job execution record. After which, a message will be sent to
+// scheduleTaskRun creates a new task execution record. After which, a message will be sent to
 // a distributed queue system to inform worker nodes to pick up the task.
-func (s *Scheduler) scheduleJobExecution(ctx context.Context, schedule Schedule) {
+func (s *TaskScheduler) scheduleTaskRun(ctx context.Context, schedule Schedule) {
 	// Insert execution record
 	query := `
-		INSERT INTO tasks.execution
-		(job_id, status)
+		INSERT INTO task.run
+		(task_id, status)
 		VALUES ($1, $2)
 		RETURNING id, created_at
 	`
 
 	var executionID int64
 	var createdAt time.Time
-	if err := s.db.QueryRowContext(ctx, query, schedule.JobID, models.EsPending).Scan(&executionID, &createdAt); err != nil {
+	if err := s.db.QueryRowContext(ctx, query, schedule.TaskID, models.RsPending).Scan(&executionID, &createdAt); err != nil {
 		log.Error().
 			Err(err).
-			Int64("job_id", schedule.JobID).
-			Msg("Failed to create job execution")
+			Int64("task_id", schedule.TaskID).
+			Msg("Failed to create task execution")
 	}
 
 	log.Info().
-		Int64("job_id", schedule.JobID).
+		Int64("task_id", schedule.TaskID).
 		Int64("execution_id", executionID).
-		Msg("Job execution scheduled")
+		Msg("Task execution scheduled")
 }

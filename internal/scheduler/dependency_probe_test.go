@@ -23,29 +23,29 @@ func TestDependencyResolver_CheckDependencies(t *testing.T) {
 
 	// Test cases
 	t.Run("no dependencies should return true", func(t *testing.T) {
-		met, err := resolver.CheckDependencies(context.Background(), []scheduler.JobDependency{})
+		met, err := resolver.CheckDependencies(context.Background(), []scheduler.TaskDependency{})
 		require.NoError(t, err)
 		assert.True(t, met)
 	})
 
 	t.Run("successful dependency with valid end time", func(t *testing.T) {
 		// Insert test data
-		jobID := insertJob(t, "Test Job", "Echo Hello World")
-		parentJobID := insertJob(t, "Parent Job", "Echo Hello World")
+		taskID := insertTask(t, "Test Task", "Echo Hello World")
+		parentTaskID := insertTask(t, "Parent Task", "Echo Hello World")
 
 		// Insert dependency
-		depID := insertDependency(t, jobID, parentJobID, "success", 3600, 0)
+		depID := insertDependency(t, taskID, parentTaskID, "success", 3600, 0)
 
 		// Insert successful execution that ended recently
 		startTime := null.NewTime(time.Now(), false)
 		endTime := null.TimeFrom(time.Now().Add(-time.Minute))
-		insertExecution(t, parentJobID, "completed", 0, startTime, endTime)
+		insertExecution(t, parentTaskID, "completed", 0, startTime, endTime)
 
 		// Check dependencies
-		met, err := resolver.CheckDependencies(context.Background(), []scheduler.JobDependency{{
+		met, err := resolver.CheckDependencies(context.Background(), []scheduler.TaskDependency{{
 			ID:                depID,
-			JobID:             jobID,
-			DependsOn:         parentJobID,
+			TaskID:            taskID,
+			DependsOn:         parentTaskID,
 			LookbackWindow:    3600,
 			RequiredCondition: "success",
 			MinWaitSeconds:    0,
@@ -56,22 +56,22 @@ func TestDependencyResolver_CheckDependencies(t *testing.T) {
 
 	t.Run("expired dependency outside lookback window", func(t *testing.T) {
 		// Insert test data
-		jobID := insertJob(t, "Test Job 2", "echo Hello World")
-		parentJobID := insertJob(t, "Parent Job 2", "echo Hello World")
+		taskID := insertTask(t, "Test Task 2", "echo Hello World")
+		parentTaskID := insertTask(t, "Parent Task 2", "echo Hello World")
 
 		// Insert dependency with short lookback window (10 seconds)
-		depID := insertDependency(t, jobID, parentJobID, "success", 10, 0)
+		depID := insertDependency(t, taskID, parentTaskID, "success", 10, 0)
 
 		// Insert successful execution that ended too long ago (15 minutes)
 		startTime := null.NewTime(time.Now(), false)
 		endTime := null.TimeFrom(time.Now().Add(-15 * time.Minute))
-		insertExecution(t, parentJobID, "completed", 0, startTime, endTime)
+		insertExecution(t, parentTaskID, "completed", 0, startTime, endTime)
 
 		// Check dependencies
-		met, err := resolver.CheckDependencies(context.Background(), []scheduler.JobDependency{{
+		met, err := resolver.CheckDependencies(context.Background(), []scheduler.TaskDependency{{
 			ID:                depID,
-			JobID:             jobID,
-			DependsOn:         parentJobID,
+			TaskID:            taskID,
+			DependsOn:         parentTaskID,
 			LookbackWindow:    10,
 			RequiredCondition: "success",
 			MinWaitSeconds:    0,
@@ -82,20 +82,20 @@ func TestDependencyResolver_CheckDependencies(t *testing.T) {
 
 	t.Run("dependency with null end time", func(t *testing.T) {
 		// Insert test data
-		jobID := insertJob(t, "Test Job 3", "Echo Hello World")
-		parentJobID := insertJob(t, "Parent Job 3", "Echo Hello World")
+		taskID := insertTask(t, "Test Task 3", "Echo Hello World")
+		parentTaskID := insertTask(t, "Parent Task 3", "Echo Hello World")
 
 		// Insert dependency
-		depID := insertDependency(t, jobID, parentJobID, "success", 3600, 0)
+		depID := insertDependency(t, taskID, parentTaskID, "success", 3600, 0)
 
 		// Insert execution with null end time (still running)
-		insertTestExecutionWithNullEndTime(t, db, parentJobID, "running", -1)
+		insertTestExecutionWithNullEndTime(t, db, parentTaskID, "running", -1)
 
 		// Check dependencies
-		met, err := resolver.CheckDependencies(context.Background(), []scheduler.JobDependency{{
+		met, err := resolver.CheckDependencies(context.Background(), []scheduler.TaskDependency{{
 			ID:                depID,
-			JobID:             jobID,
-			DependsOn:         parentJobID,
+			TaskID:            taskID,
+			DependsOn:         parentTaskID,
 			LookbackWindow:    3600,
 			RequiredCondition: "success",
 			MinWaitSeconds:    0,
@@ -106,22 +106,22 @@ func TestDependencyResolver_CheckDependencies(t *testing.T) {
 
 	t.Run("dependency with wrong exit code for success condition", func(t *testing.T) {
 		// Insert test data
-		jobID := insertJob(t, "Test Job 4", "echo Hello World")
-		parentJobID := insertJob(t, "Parent Job 4", "echo Hello World")
+		taskID := insertTask(t, "Test Task 4", "echo Hello World")
+		parentTaskID := insertTask(t, "Parent Task 4", "echo Hello World")
 
 		// Insert dependency requiring success
-		depID := insertDependency(t, jobID, parentJobID, "success", 3600, 0)
+		depID := insertDependency(t, taskID, parentTaskID, "success", 3600, 0)
 
 		// Insert failed execution (non-zero exit code)
 		startTime := null.NewTime(time.Now(), false)
 		endTime := null.TimeFrom(time.Now().Add(-15 * time.Minute))
-		insertExecution(t, parentJobID, "failed", 1, startTime, endTime)
+		insertExecution(t, parentTaskID, "failed", 1, startTime, endTime)
 
 		// Check dependencies
-		met, err := resolver.CheckDependencies(context.Background(), []scheduler.JobDependency{{
+		met, err := resolver.CheckDependencies(context.Background(), []scheduler.TaskDependency{{
 			ID:                depID,
-			JobID:             jobID,
-			DependsOn:         parentJobID,
+			TaskID:            taskID,
+			DependsOn:         parentTaskID,
 			LookbackWindow:    3600,
 			RequiredCondition: "success",
 			MinWaitSeconds:    0,
@@ -132,22 +132,22 @@ func TestDependencyResolver_CheckDependencies(t *testing.T) {
 
 	t.Run("dependency with completion condition", func(t *testing.T) {
 		// Insert test data
-		jobID := insertJob(t, "Test Job 5", "echo Hello World")
-		parentJobID := insertJob(t, "Parent Job 5", "echo Hello World")
+		taskID := insertTask(t, "Test Task 5", "echo Hello World")
+		parentTaskID := insertTask(t, "Parent Task 5", "echo Hello World")
 
 		// Insert dependency requiring only completion
-		depID := insertDependency(t, jobID, parentJobID, "completion", 3600, 0)
+		depID := insertDependency(t, taskID, parentTaskID, "completion", 3600, 0)
 
 		// Insert failed execution with proper exit code (not -1)
 		startTime := null.NewTime(time.Now(), false)
 		endTime := null.TimeFrom(time.Now().Add(-time.Minute))
-		insertExecution(t, parentJobID, "failed", 1, startTime, endTime)
+		insertExecution(t, parentTaskID, "failed", 1, startTime, endTime)
 
 		// Check dependencies
-		met, err := resolver.CheckDependencies(context.Background(), []scheduler.JobDependency{{
+		met, err := resolver.CheckDependencies(context.Background(), []scheduler.TaskDependency{{
 			ID:                depID,
-			JobID:             jobID,
-			DependsOn:         parentJobID,
+			TaskID:            taskID,
+			DependsOn:         parentTaskID,
 			LookbackWindow:    3600,
 			RequiredCondition: "completion",
 			MinWaitSeconds:    0,
@@ -158,22 +158,22 @@ func TestDependencyResolver_CheckDependencies(t *testing.T) {
 
 	t.Run("dependency with failure condition", func(t *testing.T) {
 		// Insert test data
-		jobID := insertJob(t, "Test Job 6", "echo Hello World")
-		parentJobID := insertJob(t, "Parent Job 6", "echo Hello World")
+		taskID := insertTask(t, "Test Task 6", "echo Hello World")
+		parentTaskID := insertTask(t, "Parent Task 6", "echo Hello World")
 
 		// Insert dependency requiring failure
-		depID := insertDependency(t, jobID, parentJobID, "failure", 3600, 0)
+		depID := insertDependency(t, taskID, parentTaskID, "failure", 3600, 0)
 
 		// Insert failed execution
 		startTime := null.NewTime(time.Now(), false)
 		endTime := null.TimeFrom(time.Now().Add(-time.Minute))
-		insertExecution(t, parentJobID, "failed", 1, startTime, endTime)
+		insertExecution(t, parentTaskID, "failed", 1, startTime, endTime)
 
 		// Check dependencies
-		met, err := resolver.CheckDependencies(context.Background(), []scheduler.JobDependency{{
+		met, err := resolver.CheckDependencies(context.Background(), []scheduler.TaskDependency{{
 			ID:                depID,
-			JobID:             jobID,
-			DependsOn:         parentJobID,
+			TaskID:            taskID,
+			DependsOn:         parentTaskID,
 			LookbackWindow:    3600,
 			RequiredCondition: "failure",
 			MinWaitSeconds:    0,
@@ -184,34 +184,34 @@ func TestDependencyResolver_CheckDependencies(t *testing.T) {
 
 	t.Run("multiple dependencies all met", func(t *testing.T) {
 		// Insert test data
-		jobID := insertJob(t, "Test Job 7", "echo Hello World")
-		parentJobID1 := insertJob(t, "Parent Job 7-1", "echo Hello World")
-		parentJobID2 := insertJob(t, "Parent Job 7-2", "echo Hello World")
+		taskID := insertTask(t, "Test Task 7", "echo Hello World")
+		parentTaskID1 := insertTask(t, "Parent Task 7-1", "echo Hello World")
+		parentTaskID2 := insertTask(t, "Parent Task 7-2", "echo Hello World")
 
 		lookbackWindow := 3600
 		// Insert dependencies
-		depID1 := insertDependency(t, jobID, parentJobID1, "success", lookbackWindow, 0)
-		depID2 := insertDependency(t, jobID, parentJobID2, "success", lookbackWindow, 0)
+		depID1 := insertDependency(t, taskID, parentTaskID1, "success", lookbackWindow, 0)
+		depID2 := insertDependency(t, taskID, parentTaskID2, "success", lookbackWindow, 0)
 
 		// Insert successful executions
 		startTime := null.NewTime(time.Now(), false)
 		endTime := null.TimeFrom(time.Now().Add(-time.Minute))
-		insertExecution(t, parentJobID1, "completed", 0, startTime, endTime)
-		insertExecution(t, parentJobID2, "completed", 0, startTime, endTime)
+		insertExecution(t, parentTaskID1, "completed", 0, startTime, endTime)
+		insertExecution(t, parentTaskID2, "completed", 0, startTime, endTime)
 
 		// Check dependencies
-		met, err := resolver.CheckDependencies(context.Background(), []scheduler.JobDependency{
+		met, err := resolver.CheckDependencies(context.Background(), []scheduler.TaskDependency{
 			{
 				ID:                depID1,
-				JobID:             jobID,
-				DependsOn:         parentJobID1,
+				TaskID:            taskID,
+				DependsOn:         parentTaskID1,
 				LookbackWindow:    lookbackWindow,
 				RequiredCondition: "success",
 				MinWaitSeconds:    0,
 			}, {
 				ID:                depID2,
-				JobID:             jobID,
-				DependsOn:         parentJobID2,
+				TaskID:            taskID,
+				DependsOn:         parentTaskID2,
 				LookbackWindow:    lookbackWindow,
 				RequiredCondition: "success",
 				MinWaitSeconds:    0,
@@ -222,34 +222,34 @@ func TestDependencyResolver_CheckDependencies(t *testing.T) {
 
 	t.Run("multiple dependencies one not met", func(t *testing.T) {
 		// Insert test data
-		jobID := insertJob(t, "Test Job 8", "echo Hello World")
-		parentJobID1 := insertJob(t, "Parent Job 8-1", "echo Hello World")
-		parentJobID2 := insertJob(t, "Parent Job 8-2", "echo Hello World")
+		taskID := insertTask(t, "Test Task 8", "echo Hello World")
+		parentTaskID1 := insertTask(t, "Parent Task 8-1", "echo Hello World")
+		parentTaskID2 := insertTask(t, "Parent Task 8-2", "echo Hello World")
 
 		lookbackWindow := 3600
 		// Insert dependencies
-		depID1 := insertDependency(t, jobID, parentJobID1, "success", lookbackWindow, 0)
-		depID2 := insertDependency(t, jobID, parentJobID2, "success", lookbackWindow, 0)
+		depID1 := insertDependency(t, taskID, parentTaskID1, "success", lookbackWindow, 0)
+		depID2 := insertDependency(t, taskID, parentTaskID2, "success", lookbackWindow, 0)
 
 		// Insert one successful and one failed execution
 		startTime := null.NewTime(time.Now(), false)
 		endTime := null.TimeFrom(time.Now().Add(-time.Minute))
-		insertExecution(t, parentJobID1, "completed", 0, startTime, endTime)
-		insertExecution(t, parentJobID2, "failed", 1, startTime, endTime)
+		insertExecution(t, parentTaskID1, "completed", 0, startTime, endTime)
+		insertExecution(t, parentTaskID2, "failed", 1, startTime, endTime)
 
 		// Check dependencies
-		met, err := resolver.CheckDependencies(context.Background(), []scheduler.JobDependency{
+		met, err := resolver.CheckDependencies(context.Background(), []scheduler.TaskDependency{
 			{
 				ID:                depID1,
-				JobID:             jobID,
-				DependsOn:         parentJobID1,
+				TaskID:            taskID,
+				DependsOn:         parentTaskID1,
 				LookbackWindow:    lookbackWindow,
 				RequiredCondition: "success",
 				MinWaitSeconds:    0,
 			}, {
 				ID:                depID2,
-				JobID:             jobID,
-				DependsOn:         parentJobID2,
+				TaskID:            taskID,
+				DependsOn:         parentTaskID2,
 				LookbackWindow:    lookbackWindow,
 				RequiredCondition: "success",
 				MinWaitSeconds:    0,
@@ -261,22 +261,22 @@ func TestDependencyResolver_CheckDependencies(t *testing.T) {
 	// Add test for cancelled condition
 	t.Run("dependency with cancelled condition", func(t *testing.T) {
 		// Insert test data
-		jobID := insertJob(t, "Test Job Cancelled", "echo Hello World")
-		parentJobID := insertJob(t, "Parent Job Cancelled", "echo Hello World")
+		taskID := insertTask(t, "Test Task Cancelled", "echo Hello World")
+		parentTaskID := insertTask(t, "Parent Task Cancelled", "echo Hello World")
 
 		// Insert dependency requiring cancellation
-		depID := insertDependency(t, jobID, parentJobID, "cancelled", 3600, 0)
+		depID := insertDependency(t, taskID, parentTaskID, "cancelled", 3600, 0)
 
 		// Insert cancelled execution
 		startTime := null.NewTime(time.Now(), false)
 		endTime := null.TimeFrom(time.Now().Add(-time.Minute))
-		insertExecution(t, parentJobID, "cancelled", -1, startTime, endTime)
+		insertExecution(t, parentTaskID, "cancelled", -1, startTime, endTime)
 
 		// Check dependencies
-		met, err := resolver.CheckDependencies(context.Background(), []scheduler.JobDependency{{
+		met, err := resolver.CheckDependencies(context.Background(), []scheduler.TaskDependency{{
 			ID:                depID,
-			JobID:             jobID,
-			DependsOn:         parentJobID,
+			TaskID:            taskID,
+			DependsOn:         parentTaskID,
 			LookbackWindow:    3600,
 			RequiredCondition: "cancelled",
 			MinWaitSeconds:    0,
@@ -288,22 +288,22 @@ func TestDependencyResolver_CheckDependencies(t *testing.T) {
 	// Add test for lapsed condition
 	t.Run("dependency with lapsed condition", func(t *testing.T) {
 		// Insert test data
-		jobID := insertJob(t, "Test Job Lapsed", "echo Hello World")
-		parentJobID := insertJob(t, "Parent Job Lapsed", "echo Hello World")
+		taskID := insertTask(t, "Test Task Lapsed", "echo Hello World")
+		parentTaskID := insertTask(t, "Parent Task Lapsed", "echo Hello World")
 
 		// Insert dependency requiring lapsed
-		depID := insertDependency(t, jobID, parentJobID, "lapsed", 3600, 0)
+		depID := insertDependency(t, taskID, parentTaskID, "lapsed", 3600, 0)
 
 		// Insert lapsed execution
 		startTime := null.NewTime(time.Now(), false)
 		endTime := null.TimeFrom(time.Now().Add(-time.Minute))
-		insertExecution(t, parentJobID, "lapsed", -1, startTime, endTime)
+		insertExecution(t, parentTaskID, "lapsed", -1, startTime, endTime)
 
 		// Check dependencies
-		met, err := resolver.CheckDependencies(context.Background(), []scheduler.JobDependency{{
+		met, err := resolver.CheckDependencies(context.Background(), []scheduler.TaskDependency{{
 			ID:                depID,
-			JobID:             jobID,
-			DependsOn:         parentJobID,
+			TaskID:            taskID,
+			DependsOn:         parentTaskID,
 			LookbackWindow:    3600,
 			RequiredCondition: "lapsed",
 			MinWaitSeconds:    0,
@@ -313,7 +313,7 @@ func TestDependencyResolver_CheckDependencies(t *testing.T) {
 	})
 }
 
-func TestDependencyProbe_ProcessPendingJob(t *testing.T) {
+func TestDependencyProbe_ProcessPendingTask(t *testing.T) {
 	clearTestDB(t)
 
 	// Create a mock queue client
@@ -322,44 +322,44 @@ func TestDependencyProbe_ProcessPendingJob(t *testing.T) {
 	// Create a test DependencyProbe with the mock queue
 	probe := scheduler.NewDependencyProbe(db, mockQueue)
 
-	t.Run("job with dependencies all met should publish to queue", func(t *testing.T) {
+	t.Run("task with dependencies all met should publish to queue", func(t *testing.T) {
 		// Insert test data
-		jobID := insertJob(t, "Process Job 1", "echo Processing")
-		parentJobID := insertJob(t, "Parent Job 1", "echo Parent")
+		taskID := insertTask(t, "Process Task 1", "echo Processing")
+		parentTaskID := insertTask(t, "Parent Task 1", "echo Parent")
 
 		// Insert dependency
-		insertDependency(t, jobID, parentJobID, "success", 3600, 0)
+		insertDependency(t, taskID, parentTaskID, "success", 3600, 0)
 
 		// Insert successful parent execution
 		startTime := null.NewTime(time.Now(), false)
 		endTime := null.TimeFrom(time.Now().Add(-time.Minute))
-		insertExecution(t, parentJobID, "completed", 0, startTime, endTime)
+		insertExecution(t, parentTaskID, "completed", 0, startTime, endTime)
 
 		// Insert pending execution
-		execID := insertExecution(t, jobID, "pending", -1, null.NewTime(time.Time{}, false), null.NewTime(time.Time{}, false))
+		execID := insertExecution(t, taskID, "pending", -1, null.NewTime(time.Time{}, false), null.NewTime(time.Time{}, false))
 
 		// Setup the mock to expect a publish call
 		mockQueue.On("Publish", mock.Anything, mock.MatchedBy(func(msg queue.TaskMessage) bool {
-			return msg.ExecutionID == execID && msg.JobID == jobID
+			return msg.ExecutionID == execID && msg.TaskID == taskID
 		})).Return(nil).Once()
 
-		// Fetch the pending job
-		pendingJobs, err := probe.FetchPendingJobs(context.Background())
+		// Fetch the pending task
+		pendingTasks, err := probe.FetchPendingTasks(context.Background())
 		require.NoError(t, err)
-		require.NotEmpty(t, pendingJobs, "Should find at least one pending job")
+		require.NotEmpty(t, pendingTasks, "Should find at least one pending task")
 
-		// Find our specific job
-		var ourJob scheduler.PendingJob
-		for _, job := range pendingJobs {
-			if job.ID == execID {
-				ourJob = job
+		// Find our specific task
+		var ourTask scheduler.PendingTask
+		for _, task := range pendingTasks {
+			if task.ID == execID {
+				ourTask = task
 				break
 			}
 		}
-		require.NotZero(t, ourJob.ID, "Should find our specific pending job")
+		require.NotZero(t, ourTask.ID, "Should find our specific pending task")
 
-		// Process the pending job
-		err = probe.ProcessPendingJob(context.Background(), ourJob)
+		// Process the pending task
+		err = probe.ProcessPendingTask(context.Background(), ourTask)
 		require.NoError(t, err)
 
 		// Verify mock expectations
@@ -367,13 +367,13 @@ func TestDependencyProbe_ProcessPendingJob(t *testing.T) {
 	})
 
 	// This test can remain largely the same, but with a better structure
-	t.Run("job past cutoff time should be marked as lapsed", func(t *testing.T) {
+	t.Run("task past cutoff time should be marked as lapsed", func(t *testing.T) {
 		// Insert test data
-		jobID := insertJob(t, "Process Job 2", "echo Processing")
-		parentJobID := insertJob(t, "Parent Job 2", "echo Parent")
+		taskID := insertTask(t, "Process Task 2", "echo Processing")
+		parentTaskID := insertTask(t, "Parent Task 2", "echo Parent")
 
 		// Insert dependency with very short lookback window
-		insertDependency(t, jobID, parentJobID, "success", 1, 0) // 1 second lookback
+		insertDependency(t, taskID, parentTaskID, "success", 1, 0) // 1 second lookback
 
 		// No parent execution (to ensure dependency isn't met)
 
@@ -382,71 +382,71 @@ func TestDependencyProbe_ProcessPendingJob(t *testing.T) {
 
 		var execID int64
 		err := db.QueryRow(`
-			INSERT INTO tasks.execution (job_id, status, created_at)
+			INSERT INTO task.run (task_id, status, created_at)
 			VALUES ($1, $2, $3)
 			RETURNING id
-		`, jobID, models.EsPending, createdTime).Scan(&execID)
+		`, taskID, models.RsPending, createdTime).Scan(&execID)
 		require.NoError(t, err)
 
-		// Fetch the pending job
-		pendingJobs, err := probe.FetchPendingJobs(context.Background())
+		// Fetch the pending task
+		pendingTasks, err := probe.FetchPendingTasks(context.Background())
 		require.NoError(t, err)
 
-		// Find our specific job
-		var ourJob scheduler.PendingJob
-		for _, job := range pendingJobs {
-			if job.ID == execID {
-				ourJob = job
+		// Find our specific task
+		var ourTask scheduler.PendingTask
+		for _, task := range pendingTasks {
+			if task.ID == execID {
+				ourTask = task
 				break
 			}
 		}
-		require.NotZero(t, ourJob.ID, "Should find our specific pending job")
+		require.NotZero(t, ourTask.ID, "Should find our specific pending task")
 
-		// Process the pending job
-		err = probe.ProcessPendingJob(context.Background(), ourJob)
-		require.Error(t, err, "Should return error because job is lapsed")
+		// Process the pending task
+		err = probe.ProcessPendingTask(context.Background(), ourTask)
+		require.Error(t, err, "Should return error because task is lapsed")
 
 		// Verify the execution status was updated to lapsed
 		var status string
-		err = db.QueryRow("SELECT status FROM tasks.execution WHERE id = $1", execID).Scan(&status)
+		err = db.QueryRow("SELECT status FROM task.run WHERE id = $1", execID).Scan(&status)
 		require.NoError(t, err)
-		assert.Equal(t, string(models.EsLapsed), status, "Execution should be marked as lapsed")
+		assert.Equal(t, string(models.RsLapsed), status, "Execution should be marked as lapsed")
 	})
 }
 
-func TestDependencyProbe_FetchPendingJobs(t *testing.T) {
+func TestDependencyProbe_FetchPendingTasks(t *testing.T) {
 	clearTestDB(t)
 
-	// Create some test data with pending jobs
-	jobID1 := insertJob(t, "Pending Job 1", "echo Pending 1")
-	jobID2 := insertJob(t, "Pending Job 2", "echo Pending 2")
+	// Create some test data with pending tasks
+	taskID1 := insertTask(t, "Pending Task 1", "echo Pending 1")
+	taskID2 := insertTask(t, "Pending Task 2", "echo Pending 2")
 
 	// Insert pending executions
-	execID1 := insertExecution(t, jobID1, "pending", -1, null.NewTime(time.Time{}, false), null.NewTime(time.Time{}, false))
-	execID2 := insertExecution(t, jobID2, "pending", -1, null.NewTime(time.Time{}, false), null.NewTime(time.Time{}, false))
+	execID1 := insertExecution(t, taskID1, "pending", -1, null.NewTime(time.Time{}, false), null.NewTime(time.Time{}, false))
+	execID2 := insertExecution(t, taskID2, "pending", -1, null.NewTime(time.Time{}, false), null.NewTime(time.Time{}, false))
 
 	// Create the probe
 	probe := scheduler.NewDependencyProbe(db, rq)
 
-	// Test fetching pending jobs
-	pendingJobs, err := probe.FetchPendingJobs(context.Background())
+	// Test fetching pending tasks
+	pendingTasks, err := probe.FetchPendingTasks(context.Background())
 	require.NoError(t, err)
 
-	// Check that we got our pending jobs
-	foundJob1 := false
-	foundJob2 := false
+	// Check that we got our pending tasks
+	foundTask1 := false
+	foundTask2 := false
 
-	for _, job := range pendingJobs {
-		if job.ID == execID1 && job.JobID == jobID1 {
-			foundJob1 = true
+	for _, task := range pendingTasks {
+		if task.ID == execID1 && task.TaskID == taskID1 {
+			foundTask1 = true
 		}
-		if job.ID == execID2 && job.JobID == jobID2 {
-			foundJob2 = true
+		if task.ID == execID2 && task.TaskID == taskID2 {
+			foundTask2 = true
 		}
 	}
 
-	assert.True(t, foundJob1, "Should find first pending job")
-	assert.True(t, foundJob2, "Should find second pending job")
+	assert.True(t, foundTask1, "Should find first pending task")
+	assert.True(t, foundTask2, "Should find second pending task")
 }
 
 func TestDependencyProbe_StartStop(t *testing.T) {

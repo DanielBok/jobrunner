@@ -8,7 +8,7 @@ CREATE TABLE task.definition
     description     TEXT,
     image_name      TEXT,
     command         TEXT                     NOT NULL,
-    timeout_seconds INT                      NOT NULL DEFAULT 3600,
+    timeout_seconds BIGINT                   NOT NULL DEFAULT 3600,
     max_retries     INT                      NOT NULL DEFAULT 0,
     created_at      TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
     updated_at      TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
@@ -23,8 +23,8 @@ CREATE TABLE task.dependency
     id                 BIGSERIAL PRIMARY KEY,
     task_id            BIGINT                   NOT NULL REFERENCES task.definition (id) ON DELETE CASCADE,
     depends_on         BIGINT                   NOT NULL REFERENCES task.definition (id) ON DELETE CASCADE,
-    lookback_window    INT                      NOT NULL DEFAULT 86400,
-    min_wait_time      INT                      NOT NULL DEFAULT 0, -- Minimum wait time (seconds) after parent dependency met
+    lookback_window    BIGINT                   NOT NULL DEFAULT 86400,
+    min_wait_time      BIGINT                   NOT NULL DEFAULT 0, -- Minimum wait time (seconds) after parent dependency met
     required_condition task.REQUIRED_CONDITION  NOT NULL DEFAULT 'success',
     created_at         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
     updated_at         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
@@ -53,7 +53,7 @@ CREATE TYPE task.RUN_STATUS AS ENUM ('pending', 'running', 'completed', 'failed'
 CREATE TABLE task.run
 (
     id             BIGSERIAL PRIMARY KEY,
-    task_id         BIGINT REFERENCES task.definition (id) ON DELETE CASCADE,
+    task_id        BIGINT REFERENCES task.definition (id) ON DELETE CASCADE,
     status         task.RUN_STATUS          NOT NULL DEFAULT 'pending',
     start_time     TIMESTAMP WITH TIME ZONE,
     end_time       TIMESTAMP WITH TIME ZONE,

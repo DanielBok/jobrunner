@@ -340,7 +340,7 @@ func TestDependencyProbe_ProcessPendingTask(t *testing.T) {
 
 		// Setup the mock to expect a publish call
 		mockQueue.On("Publish", mock.Anything, mock.MatchedBy(func(msg queue.TaskMessage) bool {
-			return msg.ExecutionID == execID && msg.TaskID == taskID
+			return msg.RunID == execID && msg.TaskID == taskID
 		})).Return(nil).Once()
 
 		// Fetch the pending task

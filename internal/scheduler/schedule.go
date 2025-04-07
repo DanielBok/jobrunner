@@ -10,7 +10,7 @@ type Schedule struct {
 	TaskName       string           `db:"name"`            // Task name
 	ImageName      null.String      `db:"image_name"`      // Docker image name. If provided, task executes in a docker container
 	Command        string           `db:"command"`         // The shell command to execute. If using docker, this is the [COMMAND] [ARG...] portion of the docker container run command
-	TimeoutSeconds int              `db:"timeout_seconds"` // Maximum task duration per attempt. 1 retry is 1 new attempt
+	TimeoutSeconds int64            `db:"timeout_seconds"` // Maximum task duration per attempt. 1 retry is 1 new attempt
 	MaxRetries     int              `db:"max_retries"`     // Number of times to retry at most
 	CronExpression string           `db:"cron_expression"` // Task run cron expression. This is specified in IANA timezone format
 	IsActive       bool             `db:"is_active"`       // Whether task is still active

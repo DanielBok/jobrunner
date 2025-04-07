@@ -88,7 +88,7 @@ func TestRedisClient_Publish(t *testing.T) {
 	t.Run("publish message", func(t *testing.T) {
 		// Create a message
 		msg := queue.TaskMessage{
-			ExecutionID: 1,
+			RunID:       1,
 			TaskID:      100,
 			Command:     "echo test",
 			Timeout:     60,
@@ -112,7 +112,7 @@ func TestRedisClient_Publish(t *testing.T) {
 		var decodedMsg queue.TaskMessage
 		err = json.Unmarshal([]byte(result), &decodedMsg)
 		assert.NoError(t, err)
-		assert.Equal(t, msg.ExecutionID, decodedMsg.ExecutionID)
+		assert.Equal(t, msg.RunID, decodedMsg.RunID)
 		assert.Equal(t, msg.TaskID, decodedMsg.TaskID)
 		assert.Equal(t, msg.Command, decodedMsg.Command)
 	})
@@ -123,9 +123,9 @@ func TestRedisClient_Publish(t *testing.T) {
 		cancel() // Cancel immediately
 
 		msg := queue.TaskMessage{
-			ExecutionID: 2,
-			TaskID:      101,
-			Command:     "echo test2",
+			RunID:   2,
+			TaskID:  101,
+			Command: "echo test2",
 		}
 
 		err := client.Publish(cancelCtx, msg)
@@ -157,7 +157,7 @@ func TestRedisClient_Subscribe(t *testing.T) {
 		// Create test messages
 		msgs := []queue.TaskMessage{
 			{
-				ExecutionID: 1,
+				RunID:       1,
 				TaskID:      100,
 				Command:     "echo test1",
 				Timeout:     60,
@@ -165,7 +165,7 @@ func TestRedisClient_Subscribe(t *testing.T) {
 				ScheduledAt: time.Now(),
 			},
 			{
-				ExecutionID: 2,
+				RunID:       2,
 				TaskID:      101,
 				Command:     "echo test2",
 				Timeout:     120,
@@ -228,8 +228,8 @@ func TestRedisClient_Subscribe(t *testing.T) {
 		assert.Len(t, processedMsgs, len(msgs))
 
 		// Check if messages were processed in order
-		assert.Equal(t, int64(1), processedMsgs[0].ExecutionID)
-		assert.Equal(t, int64(2), processedMsgs[1].ExecutionID)
+		assert.Equal(t, int64(1), processedMsgs[0].RunID)
+		assert.Equal(t, int64(2), processedMsgs[1].RunID)
 	})
 
 	t.Run("handler panic is recovered", func(t *testing.T) {
@@ -244,7 +244,7 @@ func TestRedisClient_Subscribe(t *testing.T) {
 
 		// Create a test message
 		msg := queue.TaskMessage{
-			ExecutionID: 4,
+			RunID:       4,
 			TaskID:      103,
 			Command:     "echo test_panic",
 			Timeout:     30,
@@ -309,6 +309,6 @@ func TestRedisClient_Close(t *testing.T) {
 
 	// Attempting operations after close should fail
 	ctx := context.Background()
-	err = client.Publish(ctx, queue.TaskMessage{ExecutionID: 999})
+	err = client.Publish(ctx, queue.TaskMessage{RunID: 999})
 	assert.Error(t, err)
 }

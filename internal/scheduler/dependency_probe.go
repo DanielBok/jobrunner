@@ -51,7 +51,7 @@ type PendingTask struct {
 	TaskID         int64            `db:"task_id"`         // Task ID
 	Command        string           `db:"command"`         // Command to run for task
 	ImageName      null.String      `db:"image_name"`      // The docker image name. If provided, will run the task in docker
-	TimeoutSeconds int              `db:"timeout_seconds"` // The maximum time that the task can stay in the "running" execution status
+	TimeoutSeconds int64            `db:"timeout_seconds"` // The maximum time that the task can stay in the "running" execution status
 	MaxRetries     int              `db:"max_retries"`     // Number of times the task can retry
 	CreatedAt      time.Time        `db:"created_at"`      // Time the execution was created
 	Dependencies   []TaskDependency `db:"-"`               // Task dependencies
@@ -104,7 +104,7 @@ func (dp *DependencyProbe) Start(ctx context.Context) {
 							if err := dp.ProcessPendingTask(ctx, task); err != nil {
 								log.Error().
 									Err(err).
-									Int64("execution_id", task.ID).
+									Int64("run_id", task.ID).
 									Int64("task_id", task.TaskID).
 									Msg("Error processing task")
 							}
@@ -171,7 +171,7 @@ func (dp *DependencyProbe) FetchPendingTasks(ctx context.Context) (pendingTasks 
 // in the database and stop processing it.
 func (dp *DependencyProbe) ProcessPendingTask(ctx context.Context, task PendingTask) error {
 	if err := json.Unmarshal(task.DependencyJSON, &task.Dependencies); err != nil {
-		log.Error().Err(err).Int64("execution_id", task.ID).Msg("Failed to parse dependencies")
+		log.Error().Err(err).Int64("run_id", task.ID).Msg("Failed to parse dependencies")
 		return err
 	}
 
@@ -191,7 +191,7 @@ func (dp *DependencyProbe) ProcessPendingTask(ctx context.Context, task PendingT
 			`
 			_, err := dp.db.ExecContext(ctx, query, models.RsLapsed, task.ID)
 			if err != nil {
-				log.Error().Err(err).Int64("execution_id", task.ID).Msg("Failed to mark lapsed execution")
+				log.Error().Err(err).Int64("run_id", task.ID).Msg("Failed to mark lapsed execution")
 				return errors.New("could not mark task as lapsed")
 			}
 
@@ -202,7 +202,7 @@ func (dp *DependencyProbe) ProcessPendingTask(ctx context.Context, task PendingT
 	// Check if dependencies are now satisfied
 	depsMet, err := dp.CheckDependencies(ctx, task.Dependencies)
 	if err != nil {
-		log.Error().Err(err).Int64("execution_id", task.ID).Msg("Failed to check dependencies")
+		log.Error().Err(err).Int64("run_id", task.ID).Msg("Failed to check dependencies")
 		return err
 	}
 
@@ -210,7 +210,7 @@ func (dp *DependencyProbe) ProcessPendingTask(ctx context.Context, task PendingT
 	if depsMet {
 		// Send to queue
 		message := queue.TaskMessage{
-			ExecutionID: task.ID,
+			RunID:       task.ID,
 			TaskID:      task.TaskID,
 			Command:     task.Command,
 			ImageName:   task.ImageName.String,
@@ -220,11 +220,11 @@ func (dp *DependencyProbe) ProcessPendingTask(ctx context.Context, task PendingT
 		}
 
 		if err := dp.queue.Publish(ctx, message); err != nil {
-			log.Error().Err(err).Int64("execution_id", task.ID).Msg("Failed to publish to queue")
+			log.Error().Err(err).Int64("run_id", task.ID).Msg("Failed to publish to queue")
 			return err
 		}
 
-		log.Info().Int64("execution_id", task.ID).Msg("Dependencies satisfied, task published to queue")
+		log.Info().Int64("run_id", task.ID).Msg("Dependencies satisfied, task published to queue")
 	}
 	return nil
 }

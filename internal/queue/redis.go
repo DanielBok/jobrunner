@@ -67,7 +67,7 @@ func (r *RedisClient) Subscribe(ctx context.Context, handler func(TaskMessage) e
 			if err := processMessage(handler, *message); err != nil {
 				log.Error().
 					Err(err).
-					Int64("execution_id", message.ExecutionID).
+					Int64("run_id", message.RunID).
 					Msg("Error encountered when processing message")
 			}
 		}
@@ -102,7 +102,7 @@ func processMessage(handler func(TaskMessage) error, message TaskMessage) (err e
 	defer func() {
 		if rcv := recover(); rcv != nil {
 			// Log the panic
-			log.Error().Interface("panic", rcv).Int64("execution_id", message.ExecutionID).Msg("Handler panicked")
+			log.Error().Interface("panic", rcv).Int64("run_id", message.RunID).Msg("Handler panicked")
 
 			err = fmt.Errorf("handler panicked: %v", rcv)
 		}

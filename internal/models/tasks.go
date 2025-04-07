@@ -15,7 +15,7 @@ type TaskDefinition struct {
 	Description    null.String `db:"description"`
 	ImageName      null.String `db:"image_name"`
 	Command        string      `db:"command"`
-	TimeoutSeconds int         `db:"timeout_seconds"`
+	TimeoutSeconds int64       `db:"timeout_seconds"`
 	MaxRetries     int         `db:"max_retries"`
 	CreatedAt      time.Time   `db:"created_at"`
 	UpdatedAt      time.Time   `db:"updated_at"`
@@ -37,8 +37,8 @@ type TaskDependency struct {
 	ID                int64             `db:"id"`
 	TaskID            int64             `db:"task_id"`
 	DependsOn         int64             `db:"depends_on"`
-	LookbackWindow    int               `db:"lookback_window"`
-	MinWaitTime       int               `db:"min_wait_time"`
+	LookbackWindow    int64             `db:"lookback_window"`
+	MinWaitTime       int64             `db:"min_wait_time"`
 	RequiredCondition RequiredCondition `db:"required_condition"`
 	CreatedAt         time.Time         `db:"created_at"`
 	UpdatedAt         time.Time         `db:"updated_at"`

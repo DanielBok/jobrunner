@@ -254,9 +254,9 @@ func (s *TaskScheduler) scheduleTaskRun(ctx context.Context, schedule Schedule) 
 		RETURNING id, created_at
 	`
 
-	var executionID int64
+	var runID int64
 	var createdAt time.Time
-	if err := s.db.QueryRowContext(ctx, query, schedule.TaskID, models.RsPending).Scan(&executionID, &createdAt); err != nil {
+	if err := s.db.QueryRowContext(ctx, query, schedule.TaskID, models.RsPending).Scan(&runID, &createdAt); err != nil {
 		log.Error().
 			Err(err).
 			Int64("task_id", schedule.TaskID).
@@ -265,6 +265,6 @@ func (s *TaskScheduler) scheduleTaskRun(ctx context.Context, schedule Schedule) 
 
 	log.Info().
 		Int64("task_id", schedule.TaskID).
-		Int64("execution_id", executionID).
+		Int64("run_id", runID).
 		Msg("Task execution scheduled")
 }

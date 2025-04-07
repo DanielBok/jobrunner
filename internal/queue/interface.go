@@ -7,11 +7,11 @@ import (
 
 // TaskMessage represents a message sent to the queue
 type TaskMessage struct {
-	ExecutionID int64     `json:"execution_id"`
+	RunID       int64     `json:"run_id"`
 	TaskID      int64     `json:"task_id"`
 	Command     string    `json:"command"`
 	ImageName   string    `json:"image_name,omitempty"`
-	Timeout     int       `json:"timeout_seconds"`
+	Timeout     int64     `json:"timeout_seconds"`
 	MaxRetries  int       `json:"max_retries"`
 	ScheduledAt time.Time `json:"scheduled_at"`
 }

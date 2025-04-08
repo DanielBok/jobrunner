@@ -189,7 +189,7 @@ func (dp *DependencyProbe) ProcessPendingTask(ctx context.Context, task PendingT
 				SET status = $1
 				WHERE id = $2
 			`
-			_, err := dp.db.ExecContext(ctx, query, models.RsLapsed, task.ID)
+			_, err := dp.db.ExecContext(ctx, query, models.RunStatusLapsed, task.ID)
 			if err != nil {
 				log.Error().Err(err).Int64("run_id", task.ID).Msg("Failed to mark lapsed execution")
 				return errors.New("could not mark task as lapsed")
@@ -283,9 +283,9 @@ func (dp *DependencyProbe) CheckDependencies(ctx context.Context, dependencies [
 }
 
 func metDependencyCondition(condition models.RequiredCondition, status models.RunStatus) bool {
-	return (condition == models.RcSuccess && status == models.RsCompleted) ||
-		(condition == models.RcCompletion && (status == models.RsCompleted || status == models.RsFailed)) ||
-		(condition == models.RcFailure && status == models.RsFailed) ||
-		(condition == models.RcCancelled && (status == models.RsCancelled)) ||
-		(condition == models.RcLapsed && status == models.RsLapsed)
+	return (condition == models.ReqCondSuccess && status == models.RunStatusCompleted) ||
+		(condition == models.ReqCondCompletion && (status == models.RunStatusCompleted || status == models.RunStatusFailed)) ||
+		(condition == models.ReqCondFailure && status == models.RunStatusFailed) ||
+		(condition == models.ReqCondCancelled && (status == models.RunStatusCancelled)) ||
+		(condition == models.ReqCondLapsed && status == models.RunStatusLapsed)
 }

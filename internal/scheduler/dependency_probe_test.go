@@ -385,7 +385,7 @@ func TestDependencyProbe_ProcessPendingTask(t *testing.T) {
 			INSERT INTO task.run (task_id, status, created_at)
 			VALUES ($1, $2, $3)
 			RETURNING id
-		`, taskID, models.RsPending, createdTime).Scan(&execID)
+		`, taskID, models.RunStatusPending, createdTime).Scan(&execID)
 		require.NoError(t, err)
 
 		// Fetch the pending task
@@ -410,7 +410,7 @@ func TestDependencyProbe_ProcessPendingTask(t *testing.T) {
 		var status string
 		err = db.QueryRow("SELECT status FROM task.run WHERE id = $1", execID).Scan(&status)
 		require.NoError(t, err)
-		assert.Equal(t, string(models.RsLapsed), status, "Execution should be marked as lapsed")
+		assert.Equal(t, string(models.RunStatusLapsed), status, "Execution should be marked as lapsed")
 	})
 }
 

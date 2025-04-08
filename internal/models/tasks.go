@@ -25,11 +25,11 @@ type TaskDefinition struct {
 type RequiredCondition string
 
 const (
-	RcSuccess    RequiredCondition = "success"
-	RcCompletion RequiredCondition = "completion"
-	RcFailure    RequiredCondition = "failure"
-	RcCancelled  RequiredCondition = "cancelled"
-	RcLapsed     RequiredCondition = "lapsed"
+	ReqCondSuccess    RequiredCondition = "success"
+	ReqCondCompletion RequiredCondition = "completion"
+	ReqCondFailure    RequiredCondition = "failure"
+	ReqCondCancelled  RequiredCondition = "cancelled"
+	ReqCondLapsed     RequiredCondition = "lapsed"
 )
 
 // TaskDependency is a models representing the `tasks.dependency` table
@@ -57,12 +57,12 @@ type TaskSchedule struct {
 type RunStatus string
 
 const (
-	RsPending   RunStatus = "pending"
-	RsRunning   RunStatus = "running"
-	RsCompleted RunStatus = "completed"
-	RsFailed    RunStatus = "failed"
-	RsCancelled RunStatus = "cancelled"
-	RsLapsed    RunStatus = "lapsed"
+	RunStatusPending   RunStatus = "pending"
+	RunStatusRunning   RunStatus = "running"
+	RunStatusCompleted RunStatus = "completed"
+	RunStatusFailed    RunStatus = "failed"
+	RunStatusCancelled RunStatus = "cancelled"
+	RunStatusLapsed    RunStatus = "lapsed"
 )
 
 type TaskRun struct {

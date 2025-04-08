@@ -186,12 +186,11 @@ func TestRedisClient_Subscribe(t *testing.T) {
 
 		// Start subscription in a goroutine
 		go func() {
-			handler := func(msg queue.TaskMessage) error {
+			handler := func(msg queue.TaskMessage) {
 				mu.Lock()
 				processedMsgs = append(processedMsgs, msg)
 				mu.Unlock()
 				wg.Done()
-				return nil
 			}
 
 			err := client.Subscribe(subCtx, handler)
@@ -261,7 +260,7 @@ func TestRedisClient_Subscribe(t *testing.T) {
 
 		// Start subscription in a goroutine
 		go func() {
-			handler := func(msg queue.TaskMessage) error {
+			handler := func(msg queue.TaskMessage) {
 				wg.Done()
 				panic("test panic")
 			}

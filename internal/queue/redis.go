@@ -49,7 +49,7 @@ func (r *RedisClient) Publish(ctx context.Context, message TaskMessage) error {
 
 // Subscribe starts listening for messages and processes them with the handler. One client can
 // only be subscribed once
-func (r *RedisClient) Subscribe(ctx context.Context, handler func(TaskMessage) error) error {
+func (r *RedisClient) Subscribe(ctx context.Context, handler func(TaskMessage)) error {
 	for {
 		select {
 		case <-ctx.Done():
@@ -98,7 +98,7 @@ func (r *RedisClient) getNewMessage(ctx context.Context) (*TaskMessage, error) {
 	return &message, nil
 }
 
-func processMessage(handler func(TaskMessage) error, message TaskMessage) (err error) {
+func processMessage(handler func(TaskMessage), message TaskMessage) (err error) {
 	defer func() {
 		if rcv := recover(); rcv != nil {
 			// Log the panic
@@ -108,7 +108,8 @@ func processMessage(handler func(TaskMessage) error, message TaskMessage) (err e
 		}
 	}()
 
-	return handler(message)
+	handler(message)
+	return nil
 }
 
 // Close terminates the Redis connection

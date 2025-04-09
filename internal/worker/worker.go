@@ -189,9 +189,92 @@ func (w *Worker) RunDockerTask(ctx context.Context, message queue.TaskMessage) (
 		Str("command", message.Command).
 		Msg("Executing task")
 
-	var zero *RunResult
+	// Container name
+	containerName := fmt.Sprintf("jobrunner-%d-%s", message.RunID, w.ID)
 
-	return zero, nil
+	// Build docker run command
+	args := []string{
+		"run",
+		// Removes a container after its stopped
+		"--rm",
+		// Add timeout with proper signal handling
+		// This adds an inner timeout to ensure Docker gets proper termination signal
+		"--stop-timeout", "10",
+		// Add unique container name based on run ID to make it easier to track and kill if needed
+		"--name", containerName,
+		// Image to run
+		message.ImageName,
+	}
+
+	// Parse and add the command
+	cmdName, cmdArgs, err := message.FormCommand()
+	if err != nil {
+		return &RunResult{
+			Output:   "",
+			Error:    fmt.Sprintf("failed to parse command: %v", err),
+			ExitCode: 1,
+			Status:   models.RunStatusFailed,
+		}, err
+	}
+
+	// Add the command and its arguments
+	args = append(args, cmdName)
+	args = append(args, cmdArgs...)
+
+	// Create the command with context for timeout handling
+	cmd := exec.CommandContext(ctx, "docker", args...)
+
+	// Capture stdout and stderr
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	// Execute the docker command
+	err = cmd.Run()
+
+	result := &RunResult{
+		Output:   stdout.String(),
+		Error:    stderr.String(),
+		ExitCode: 0,
+		Status:   models.RunStatusCompleted,
+	}
+
+	// Handle various error cases
+	if err != nil {
+		result.ExitCode = ExitCodeUnknown
+		switch {
+		case errors.Is(err, context.DeadlineExceeded):
+			// Try to force kill the container if timeout occurs
+			killCmd := exec.Command("docker", "kill", containerName)
+			if killErr := killCmd.Run(); killErr != nil {
+				log.Warn().Err(killErr).Str("container", containerName).Msg("Failed to kill container after timeout")
+			}
+
+			err = fmt.Errorf("docker command timed out: %w", err)
+			result.ExitCode = ExitCodeTimeOut
+			result.Status = models.RunStatusCancelled
+
+		case errors.Is(err, context.Canceled):
+			// Try to stop the container gracefully if canceled
+			stopCmd := exec.Command("docker", "stop", containerName)
+			if stopErr := stopCmd.Run(); stopErr != nil {
+				log.Warn().Err(stopErr).Str("container", containerName).Msg("Failed to stop container after cancellation")
+			}
+
+			err = fmt.Errorf("docker command was canceled: %w", err)
+			result.ExitCode = ExitCodeCancelled
+			result.Status = models.RunStatusCancelled
+
+		default:
+			var exitError *exec.ExitError
+			result.Status = models.RunStatusFailed
+			if errors.As(err, &exitError) {
+				result.ExitCode = exitError.ExitCode()
+			}
+		}
+	}
+
+	return result, err
 }
 
 func (w *Worker) RunShellTask(ctx context.Context, message queue.TaskMessage) (*RunResult, error) {
@@ -217,35 +300,36 @@ func (w *Worker) RunShellTask(ctx context.Context, message queue.TaskMessage) (*
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
-	exitCode := 0
 	err = cmd.Run()
-	status := models.RunStatusCompleted
+
+	result := &RunResult{
+		Output:   stdout.String(),
+		Error:    stderr.String(),
+		ExitCode: 0,
+		Status:   models.RunStatusCompleted,
+	}
+
 	if err != nil {
-		exitCode = ExitCodeUnknown
+		result.ExitCode = ExitCodeUnknown
 		switch {
 		case errors.Is(err, context.DeadlineExceeded):
 			err = fmt.Errorf("command timed out: %w", err)
-			exitCode = ExitCodeTimeOut
-			status = models.RunStatusCancelled
+			result.ExitCode = ExitCodeTimeOut
+			result.Status = models.RunStatusCancelled
 		case errors.Is(err, context.Canceled):
 			err = fmt.Errorf("command was canceled: %w", err)
-			exitCode = ExitCodeCancelled
-			status = models.RunStatusCancelled
+			result.ExitCode = ExitCodeCancelled
+			result.Status = models.RunStatusCancelled
 		default:
 			var exitError *exec.ExitError
-			status = models.RunStatusFailed
+			result.Status = models.RunStatusFailed
 			if errors.As(err, &exitError) {
-				exitCode = exitError.ExitCode()
+				result.ExitCode = exitError.ExitCode()
 			}
 		}
 	}
 
-	return &RunResult{
-		Output:   stdout.String(),
-		Error:    stderr.String(),
-		ExitCode: exitCode,
-		Status:   status,
-	}, nil
+	return result, err
 }
 
 func (w *Worker) Stop() {

@@ -29,7 +29,7 @@ const (
 	ExitCodeUnknown   int = 999
 )
 
-func NewWorker(db *sqlx.DB, queue queue.Client) *Worker {
+func New(db *sqlx.DB, queue queue.Client) *Worker {
 	id := uuid.New().String()
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Worker{ID: id, db: db, queue: queue, ctx: ctx, cancel: cancel}
@@ -231,6 +231,7 @@ func (w *Worker) RunDockerTask(ctx context.Context, message queue.TaskMessage) (
 
 	// Execute the docker command
 	err = cmd.Run()
+	cmd.WaitDelay = 1 * time.Second
 
 	result := &RunResult{
 		Output:   stdout.String(),
@@ -243,7 +244,7 @@ func (w *Worker) RunDockerTask(ctx context.Context, message queue.TaskMessage) (
 	if err != nil {
 		result.ExitCode = ExitCodeUnknown
 		switch {
-		case errors.Is(err, context.DeadlineExceeded):
+		case errors.Is(ctx.Err(), context.DeadlineExceeded):
 			// Try to force kill the container if timeout occurs
 			killCmd := exec.Command("docker", "kill", containerName)
 			if killErr := killCmd.Run(); killErr != nil {
@@ -254,7 +255,7 @@ func (w *Worker) RunDockerTask(ctx context.Context, message queue.TaskMessage) (
 			result.ExitCode = ExitCodeTimeOut
 			result.Status = models.RunStatusCancelled
 
-		case errors.Is(err, context.Canceled):
+		case errors.Is(ctx.Err(), context.Canceled):
 			// Try to stop the container gracefully if canceled
 			stopCmd := exec.Command("docker", "stop", containerName)
 			if stopErr := stopCmd.Run(); stopErr != nil {
@@ -308,15 +309,14 @@ func (w *Worker) RunShellTask(ctx context.Context, message queue.TaskMessage) (*
 		ExitCode: 0,
 		Status:   models.RunStatusCompleted,
 	}
-
 	if err != nil {
 		result.ExitCode = ExitCodeUnknown
 		switch {
-		case errors.Is(err, context.DeadlineExceeded):
+		case errors.Is(ctx.Err(), context.DeadlineExceeded):
 			err = fmt.Errorf("command timed out: %w", err)
 			result.ExitCode = ExitCodeTimeOut
 			result.Status = models.RunStatusCancelled
-		case errors.Is(err, context.Canceled):
+		case errors.Is(ctx.Err(), context.Canceled):
 			err = fmt.Errorf("command was canceled: %w", err)
 			result.ExitCode = ExitCodeCancelled
 			result.Status = models.RunStatusCancelled

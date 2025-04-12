@@ -18,11 +18,11 @@ import (
 // TestIntegrationRunShellTask performs an integration test with real commands
 func TestIntegrationRunShellTask(t *testing.T) {
 	// Create a worker
-	wkr := worker.New(nil, nil)
+	wkr := worker.New(context.Background(), nil, nil)
 
 	t.Run("successful command", func(t *testing.T) {
 		// Create a message for a simple echo command
-		message := queue.TaskMessage{
+		message := &queue.TaskMessage{
 			RunID:      123,
 			TaskID:     456,
 			Command:    "go version",
@@ -43,7 +43,7 @@ func TestIntegrationRunShellTask(t *testing.T) {
 
 	t.Run("failing command", func(t *testing.T) {
 		// Test with a failing command
-		message := queue.TaskMessage{
+		message := &queue.TaskMessage{
 			RunID:      124,
 			TaskID:     457,
 			Command:    "go bad-cmd",
@@ -76,7 +76,7 @@ func TestIntegrationRunShellTask(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
 
-		message := queue.TaskMessage{
+		message := &queue.TaskMessage{
 			RunID:      125,
 			TaskID:     458,
 			Command:    cmd,
@@ -107,11 +107,11 @@ func TestIntegrationRunDockerTask(t *testing.T) {
 	}
 
 	// Create a worker
-	wkr := worker.New(nil, nil)
+	wkr := worker.New(context.Background(), nil, nil)
 
 	t.Run("successful command", func(t *testing.T) {
 		// Create a message for a simple docker command
-		message := queue.TaskMessage{
+		message := &queue.TaskMessage{
 			RunID:      126,
 			TaskID:     459,
 			Command:    "echo 'docker integration test'",
@@ -133,7 +133,7 @@ func TestIntegrationRunDockerTask(t *testing.T) {
 
 	t.Run("failing command", func(t *testing.T) {
 		// Test with a failing command in docker
-		message := queue.TaskMessage{
+		message := &queue.TaskMessage{
 			RunID:      127,
 			TaskID:     460,
 			Command:    "ls /nonexistentdirectory",
@@ -157,7 +157,7 @@ func TestIntegrationRunDockerTask(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 
-		message := queue.TaskMessage{
+		message := &queue.TaskMessage{
 			RunID:      128,
 			TaskID:     461,
 			Command:    "sleep 10",

@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"jobrunner/internal/config"
+	"jobrunner/internal/database"
 	"jobrunner/internal/models"
 	"jobrunner/internal/queue"
 )
@@ -47,7 +48,7 @@ func TestMain(m *testing.M) {
 		log.Fatalf("Failed to read in config: %v", err)
 	}
 
-	db, err = sqlx.Connect("pgx", conf.GetDatabaseURL())
+	db, err = database.New(conf)
 	if err != nil {
 		log.Fatalf("Failed to connect to test database: %v", err)
 	}

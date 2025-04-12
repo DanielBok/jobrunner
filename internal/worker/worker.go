@@ -16,11 +16,12 @@ import (
 )
 
 type Worker struct {
-	ID     string
-	db     *sqlx.DB
-	queue  queue.Client
-	ctx    context.Context
-	cancel context.CancelFunc
+	ID                     string
+	db                     *sqlx.DB
+	queue                  queue.Client
+	ctx                    context.Context
+	cancel                 context.CancelFunc
+	NoMessageSleepDuration int
 }
 
 const (
@@ -29,16 +30,22 @@ const (
 	ExitCodeUnknown   int = 999
 )
 
-func New(db *sqlx.DB, queue queue.Client) *Worker {
+func New(ctx context.Context, db *sqlx.DB, queue queue.Client) *Worker {
 	id := uuid.New().String()
-	ctx, cancel := context.WithCancel(context.Background())
-	return &Worker{ID: id, db: db, queue: queue, ctx: ctx, cancel: cancel}
+	ctx, cancel := context.WithCancel(ctx)
+	return &Worker{ID: id, db: db, queue: queue, ctx: ctx, cancel: cancel, NoMessageSleepDuration: 60}
 }
 
 // Start is a blocking function. It starts to listen to the queue for any queue.TaskMessage.
 // If there  are, it will execute the task as specified.
 func (w *Worker) Start() error {
-	return w.queue.Subscribe(w.ctx, func(message queue.TaskMessage) {
+	return w.queue.Subscribe(w.ctx, func(message *queue.TaskMessage) {
+		if message == nil {
+			time.Sleep(time.Duration(w.NoMessageSleepDuration) * time.Second)
+			log.Info().Msgf("No message received, sleeping for %d seconds", w.NoMessageSleepDuration)
+			return
+		}
+
 		ctx, cancel := context.WithTimeout(w.ctx, time.Duration(message.Timeout)*time.Second)
 		defer cancel()
 
@@ -181,7 +188,7 @@ type RunResult struct {
 	Status   models.RunStatus
 }
 
-func (w *Worker) RunDockerTask(ctx context.Context, message queue.TaskMessage) (*RunResult, error) {
+func (w *Worker) RunDockerTask(ctx context.Context, message *queue.TaskMessage) (*RunResult, error) {
 	log.Info().
 		Str("type", "docker").
 		Int64("run_id", message.RunID).
@@ -278,7 +285,7 @@ func (w *Worker) RunDockerTask(ctx context.Context, message queue.TaskMessage) (
 	return result, err
 }
 
-func (w *Worker) RunShellTask(ctx context.Context, message queue.TaskMessage) (*RunResult, error) {
+func (w *Worker) RunShellTask(ctx context.Context, message *queue.TaskMessage) (*RunResult, error) {
 	log.Info().
 		Str("type", "shell").
 		Int64("run_id", message.RunID).

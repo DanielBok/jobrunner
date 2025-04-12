@@ -175,7 +175,7 @@ func TestRedisClient_Subscribe(t *testing.T) {
 		}
 
 		// Setup to track processed messages
-		var processedMsgs []queue.TaskMessage
+		var processedMsgs []*queue.TaskMessage
 		var mu sync.Mutex
 		var wg sync.WaitGroup
 		wg.Add(len(msgs)) // Expect 2 messages
@@ -186,7 +186,7 @@ func TestRedisClient_Subscribe(t *testing.T) {
 
 		// Start subscription in a goroutine
 		go func() {
-			handler := func(msg queue.TaskMessage) {
+			handler := func(msg *queue.TaskMessage) {
 				mu.Lock()
 				processedMsgs = append(processedMsgs, msg)
 				mu.Unlock()
@@ -260,7 +260,7 @@ func TestRedisClient_Subscribe(t *testing.T) {
 
 		// Start subscription in a goroutine
 		go func() {
-			handler := func(msg queue.TaskMessage) {
+			handler := func(msg *queue.TaskMessage) {
 				wg.Done()
 				panic("test panic")
 			}

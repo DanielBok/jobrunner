@@ -111,7 +111,7 @@ type Client interface {
 	// Publish sends a task message to the queue
 	Publish(ctx context.Context, message TaskMessage) error
 	// Subscribe starts listening for messages and processes them with the handler. One client can only be subscribed once
-	Subscribe(ctx context.Context, handler func(TaskMessage)) error
+	Subscribe(ctx context.Context, handler func(*TaskMessage)) error
 	// Close terminates the Client connection
 	Close() error
 }

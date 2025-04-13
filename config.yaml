@@ -21,4 +21,4 @@ queue:
   password: redis
   db: 0
 
-log_level: info
+log_level: 1

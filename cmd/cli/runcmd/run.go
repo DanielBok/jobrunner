@@ -18,29 +18,7 @@ var Command = &cobra.Command{
 
 func init() {
 	Command.AddCommand(workerCmd)
-}
-
-func loadConfig(cmd *cobra.Command) *config.JRConfig {
-	confLoc := cmd.InheritedFlags().Lookup("config")
-	if confLoc.Changed {
-		fileLoc, err := cmd.InheritedFlags().GetString("config")
-		if err != nil {
-			log.Fatalf("Could not get file location: %v", err)
-		}
-
-		conf, err := config.LoadConfig(fileLoc)
-		if err != nil {
-			log.Fatalf("Could not load config file: %v", err)
-		}
-
-		return conf
-	} else {
-		conf, err := config.LoadConfig()
-		if err != nil {
-			log.Fatalf("Could not load config file: %v", err)
-		}
-		return conf
-	}
+	Command.AddCommand(schedulerCmd)
 }
 
 func mustDatabase(conf *config.JRConfig) *sqlx.DB {

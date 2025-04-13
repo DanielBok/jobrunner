@@ -71,7 +71,8 @@ func NewDependencyProbe(db *sqlx.DB, queue queue.Client) *DependencyProbe {
 }
 
 // Start will trigger the probe to scan continuously for tasks that are pending and
-// check that their dependencies are all met
+// check that their dependencies are all met. This function will run in its own
+// goroutine
 func (dp *DependencyProbe) Start(ctx context.Context) {
 	if dp.isRunning {
 		return

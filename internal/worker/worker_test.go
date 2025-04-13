@@ -18,7 +18,7 @@ import (
 // TestIntegrationRunShellTask performs an integration test with real commands
 func TestIntegrationRunShellTask(t *testing.T) {
 	// Create a worker
-	wkr := worker.New(context.Background(), nil, nil)
+	wkr := worker.New(nil, nil)
 
 	t.Run("successful command", func(t *testing.T) {
 		// Create a message for a simple echo command
@@ -107,7 +107,7 @@ func TestIntegrationRunDockerTask(t *testing.T) {
 	}
 
 	// Create a worker
-	wkr := worker.New(context.Background(), nil, nil)
+	wkr := worker.New(nil, nil)
 
 	t.Run("successful command", func(t *testing.T) {
 		// Create a message for a simple docker command

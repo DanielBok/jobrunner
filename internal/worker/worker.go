@@ -19,8 +19,6 @@ type Worker struct {
 	ID                     string
 	db                     *sqlx.DB
 	queue                  queue.Client
-	ctx                    context.Context
-	cancel                 context.CancelFunc
 	NoMessageSleepDuration int
 }
 
@@ -30,23 +28,22 @@ const (
 	ExitCodeUnknown   int = 999
 )
 
-func New(ctx context.Context, db *sqlx.DB, queue queue.Client) *Worker {
+func New(db *sqlx.DB, queue queue.Client) *Worker {
 	id := uuid.New().String()
-	ctx, cancel := context.WithCancel(ctx)
-	return &Worker{ID: id, db: db, queue: queue, ctx: ctx, cancel: cancel, NoMessageSleepDuration: 60}
+	return &Worker{ID: id, db: db, queue: queue, NoMessageSleepDuration: 60}
 }
 
 // Start is a blocking function. It starts to listen to the queue for any queue.TaskMessage.
-// If there  are, it will execute the task as specified.
-func (w *Worker) Start() error {
-	return w.queue.Subscribe(w.ctx, func(message *queue.TaskMessage) {
+// If there are, it will execute the task as specified.
+func (w *Worker) Start(ctx context.Context) error {
+	return w.queue.Subscribe(ctx, func(message *queue.TaskMessage) {
 		if message == nil {
 			time.Sleep(time.Duration(w.NoMessageSleepDuration) * time.Second)
 			log.Info().Msgf("No message received, sleeping for %d seconds", w.NoMessageSleepDuration)
 			return
 		}
 
-		ctx, cancel := context.WithTimeout(w.ctx, time.Duration(message.Timeout)*time.Second)
+		ctx, cancel := context.WithTimeout(ctx, time.Duration(message.Timeout)*time.Second)
 		defer cancel()
 
 		// updates task start
@@ -170,7 +167,7 @@ func (w *Worker) sendTaskHeartbeat(ctx context.Context, runID int64) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			_, err := w.db.ExecContext(w.ctx, `UPDATE task.run SET last_heartbeat = NOW() WHERE id = $1 `, runID)
+			_, err := w.db.ExecContext(ctx, `UPDATE task.run SET last_heartbeat = NOW() WHERE id = $1 `, runID)
 			if err != nil {
 				log.Error().
 					Err(err).
@@ -337,8 +334,4 @@ func (w *Worker) RunShellTask(ctx context.Context, message *queue.TaskMessage) (
 	}
 
 	return result, err
-}
-
-func (w *Worker) Stop() {
-	w.cancel()
 }

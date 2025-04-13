@@ -24,6 +24,7 @@ var workerCmd = &cobra.Command{
 
 		ctx, cancel := context.WithCancel(context.Background())
 		wrk := worker.New(db, queue)
+		wrk.NoMessageSleepDuration = conf.Worker.SleepDuration
 
 		sigCh := make(chan os.Signal, 1)
 		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)

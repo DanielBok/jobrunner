@@ -116,6 +116,11 @@ func (t *TaskRouter) AddDefinition(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := payload.validate(); err != nil {
+		http.Error(w, fmt.Sprintf("invalid payload: %v", err), http.StatusBadRequest)
+		return
+	}
+
 	tx, err := t.db.Beginx()
 	if err != nil {
 		http.Error(w, "Could not begin transaction", http.StatusInternalServerError)

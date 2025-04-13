@@ -32,8 +32,8 @@ type TaskScheduler struct {
 	cancelFunc context.CancelFunc
 }
 
-// NewTaskScheduler creates a new scheduler service
-func NewTaskScheduler(db *sqlx.DB, queue queue.Client) *TaskScheduler {
+// New creates a new scheduler service
+func New(db *sqlx.DB, queue queue.Client) *TaskScheduler {
 	// Create cron with seconds precision
 	c := cron.New(
 		cron.WithParser(cron.NewParser(cron.SecondOptional|cron.Minute|cron.Hour|cron.Dom|cron.Month|cron.Dow)),
@@ -50,7 +50,8 @@ func NewTaskScheduler(db *sqlx.DB, queue queue.Client) *TaskScheduler {
 	}
 }
 
-// Start begins the scheduler service
+// Start begins the scheduler service. This is non-blocking, so if you want it run indefinitely, wrap it behind
+// a sync.WaitGroup and run this with a goroutine
 func (s *TaskScheduler) Start(ctx context.Context) error {
 	if s.isRunning {
 		return nil
@@ -89,6 +90,7 @@ func (s *TaskScheduler) Stop() {
 	s.isRunning = false
 }
 
+// startScheduleTasksRefresh refreshes the schedules in its own goroutine
 func (s *TaskScheduler) startScheduleTasksRefresh(ctx context.Context, interval time.Duration) {
 	s.ticker = time.NewTicker(interval)
 

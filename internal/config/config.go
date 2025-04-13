@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
 )
@@ -38,7 +39,7 @@ type JRConfig struct {
 		DB       int    `mapstructure:"db"`
 	} `mapstructure:"queue"`
 
-	LogLevel string `mapstructure:"log_level"`
+	LogLevel zerolog.Level `mapstructure:"log_level"`
 }
 
 // LoadConfig reads the configuration from a file or environment variables

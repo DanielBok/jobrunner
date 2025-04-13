@@ -14,7 +14,7 @@ import (
 func TestGetAllSchedules(t *testing.T) {
 	// Create a new mock database
 	clearTestDB(t)
-	taskScheduler := scheduler.NewTaskScheduler(db, nil)
+	taskScheduler := scheduler.New(db, nil)
 	idMap := preloadTestDB(t)
 
 	// Call the function
@@ -66,7 +66,7 @@ func TestAddAndRemoveSchedule(t *testing.T) {
 	clearTestDB(t)
 	preloadTestDB(t)
 
-	taskScheduler := scheduler.NewTaskScheduler(db, nil)
+	taskScheduler := scheduler.New(db, nil)
 
 	// Ensure we're starting clean
 	taskScheduler.RemoveSchedule(1)

@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
 	"jobrunner/cmd/cli/runcmd"
+	"jobrunner/internal/config"
 )
 
 var RootCmd = &cobra.Command{
@@ -19,6 +21,9 @@ At a minimum, you need to start the scheduler, at least 1 worker and the webserv
 func init() {
 	RootCmd.PersistentFlags().StringP("config", "c", "", "config file path")
 	RootCmd.AddCommand(runcmd.Command)
+
+	conf := config.FromCobraCmd(RootCmd)
+	zerolog.SetGlobalLevel(conf.LogLevel)
 }
 
 func Execute() {

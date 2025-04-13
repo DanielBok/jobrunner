@@ -40,6 +40,10 @@ type JRConfig struct {
 	} `mapstructure:"queue"`
 
 	LogLevel zerolog.Level `mapstructure:"log_level"`
+
+	Worker struct {
+		SleepDuration int `mapstructure:"sleep_duration"`
+	} `mapstructure:"worker"`
 }
 
 // LoadConfig reads the configuration from a file or environment variables
@@ -117,6 +121,9 @@ func newViper() *viper.Viper {
 	v.SetDefault("queue.host", "localhost:6379")
 	v.SetDefault("queue.password", "redis")
 	v.SetDefault("queue.db", 0)
+
+	// Worker defaults
+	v.SetDefault("worker.sleep_duration", 60)
 
 	// Log level default
 	v.SetDefault("log_level", "info")

@@ -10,16 +10,16 @@ import (
 
 // TaskDefinition is a models representing the `tasks.definition` table
 type TaskDefinition struct {
-	ID             int64       `db:"id"`
-	Name           string      `db:"name"`
-	Description    null.String `db:"description"`
-	ImageName      null.String `db:"image_name"`
-	Command        string      `db:"command"`
-	TimeoutSeconds int64       `db:"timeout_seconds"`
-	MaxRetries     int         `db:"max_retries"`
-	CreatedAt      time.Time   `db:"created_at"`
-	UpdatedAt      time.Time   `db:"updated_at"`
-	IsActive       bool        `db:"is_active"`
+	ID             int64       `db:"id" json:"id"`
+	Name           string      `db:"name" json:"name"`
+	Description    null.String `db:"description" json:"description"`
+	ImageName      null.String `db:"image_name" json:"imageName"`
+	Command        string      `db:"command" json:"command"`
+	TimeoutSeconds int64       `db:"timeout_seconds" json:"timeoutSeconds"`
+	MaxRetries     int         `db:"max_retries" json:"maxRetries"`
+	CreatedAt      time.Time   `db:"created_at" json:"createdAt"`
+	UpdatedAt      time.Time   `db:"updated_at" json:"updatedAt"`
+	IsActive       bool        `db:"is_active" json:"isActive"`
 }
 
 type RequiredCondition string
@@ -34,14 +34,14 @@ const (
 
 // TaskDependency is a models representing the `tasks.dependency` table
 type TaskDependency struct {
-	ID                int64             `db:"id"`
-	TaskID            int64             `db:"task_id"`
-	DependsOn         int64             `db:"depends_on"`
-	LookbackWindow    int64             `db:"lookback_window"`
-	MinWaitTime       int64             `db:"min_wait_time"`
-	RequiredCondition RequiredCondition `db:"required_condition"`
-	CreatedAt         time.Time         `db:"created_at"`
-	UpdatedAt         time.Time         `db:"updated_at"`
+	ID                int64             `db:"id" json:"id"`
+	TaskID            int64             `db:"task_id" json:"taskID"`
+	DependsOn         int64             `db:"depends_on" json:"dependsOn"`
+	LookbackWindow    int64             `db:"lookback_window" json:"lookbackWindow"`
+	MinWaitTime       int64             `db:"min_wait_time" json:"minWaitTime"`
+	RequiredCondition RequiredCondition `db:"required_condition" json:"requiredCondition"`
+	CreatedAt         time.Time         `db:"created_at" json:"createdAt"`
+	UpdatedAt         time.Time         `db:"updated_at" json:"updatedAt"`
 }
 
 // TaskSchedule is a models representing the `tasks.schedule` table

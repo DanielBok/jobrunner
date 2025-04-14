@@ -32,7 +32,7 @@ func (m *MockQueueClient) Publish(ctx context.Context, message queue.TaskMessage
 	return args.Error(0)
 }
 
-func (m *MockQueueClient) Subscribe(ctx context.Context, handler func(queue.TaskMessage)) error {
+func (m *MockQueueClient) Subscribe(ctx context.Context, handler func(*queue.TaskMessage)) error {
 	args := m.Called(ctx, handler)
 	return args.Error(0)
 }

@@ -173,11 +173,11 @@ SELECT s.task_id,
                (SELECT JSONB_AGG(
                                JSONB_BUILD_OBJECT(
                                        'id', dep.id,
-                                       'task_id', dep.task_id,
-                                       'depends_on', dep.depends_on,
-                                       'lookback_window', dep.lookback_window,
-                                       'required_condition', dep.required_condition,
-                                       'min_wait_seconds', dep.min_wait_time
+                                       'taskId', dep.task_id,
+                                       'dependsOn', dep.depends_on,
+                                       'lookbackWindow', dep.lookback_window,
+                                       'requiredCondition', dep.required_condition,
+                                       'minWaitSeconds', dep.min_wait_time
                                )
                        )
                 FROM task.dependency dep

@@ -4,6 +4,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/rs/zerolog"
 	"jobrunner/internal/config"
 
 	"github.com/stretchr/testify/assert"
@@ -29,7 +30,7 @@ scheduler:
   poll_interval_sec: 5
   job_timeout_sec: 1800
 
-log_level: debug
+log_level: 0
 `
 	// Create a temporary file
 	tmpFile, err := os.CreateTemp("", "config-*.yaml")
@@ -70,7 +71,7 @@ log_level: debug
 	assert.Equal(t, 5, cfg.Scheduler.PollIntervalSec)
 	assert.Equal(t, 1800, cfg.Scheduler.JobTimeoutSec)
 
-	assert.Equal(t, "debug", cfg.LogLevel)
+	assert.Equal(t, zerolog.Level(0), cfg.LogLevel)
 
 	// Test the database URL construction
 	expectedURL := "postgres://testuser:testpass@testhost:5433/testdb?sslmode=require"
@@ -83,7 +84,7 @@ func TestEnvironmentVariables(t *testing.T) {
 	assert.NoError(t, os.Setenv("JR_DATABASE_PORT", "5434"))
 	assert.NoError(t, os.Setenv("JR_SERVER_PORT", "9091"))
 	assert.NoError(t, os.Setenv("JR_SCHEDULER_MAX_WORKERS", "15"))
-	assert.NoError(t, os.Setenv("JR_LOG_LEVEL", "warn"))
+	assert.NoError(t, os.Setenv("JR_LOG_LEVEL", "2"))
 
 	// Ensure we clear them afterwards
 	defer func() {
@@ -122,5 +123,5 @@ func TestEnvironmentVariables(t *testing.T) {
 	assert.Equal(t, 5434, cfg.Database.Port)
 	assert.Equal(t, 9091, cfg.Server.Port)
 	assert.Equal(t, 15, cfg.Scheduler.MaxWorkers)
-	assert.Equal(t, "warn", cfg.LogLevel)
+	assert.Equal(t, zerolog.Level(2), cfg.LogLevel)
 }

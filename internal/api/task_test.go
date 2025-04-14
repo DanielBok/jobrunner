@@ -104,13 +104,13 @@ func TestTaskRouter_AddDefinition(t *testing.T) {
 	taskRouter := api.NewTaskRouter(ctx, db, router)
 
 	// Create the task definition request
-	newTask := api.CreateTaskDefinition{
+	newTask := api.CreateTaskDefinitionRequest{
 		Name:           "New Test Task",
 		Command:        "echo New Task",
 		TimeoutSeconds: 3600,
 		MaxRetries:     2,
 		Schedules: []struct {
-			CronExpression string `json:"cron_expression"`
+			CronExpression string `json:"cronExpression"`
 			Timezone       string `json:"timezone"`
 		}{
 			{
@@ -123,10 +123,10 @@ func TestTaskRouter_AddDefinition(t *testing.T) {
 			},
 		},
 		Dependencies: []struct {
-			DependsOn         int64                    `json:"depends_on"`
-			LookbackWindow    int64                    `json:"lookback_window"`
-			MinWaitTime       int64                    `json:"min_wait_time"`
-			RequiredCondition models.RequiredCondition `json:"required_condition"`
+			DependsOn         int64                    `json:"dependsOn"`
+			LookbackWindow    int64                    `json:"lookbackWindow"`
+			MinWaitTime       int64                    `json:"minWaitTime"`
+			RequiredCondition models.RequiredCondition `json:"requiredCondition"`
 		}{
 			{
 				DependsOn:         dependencyTaskID,
@@ -156,7 +156,7 @@ func TestTaskRouter_AddDefinition(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rr.Code)
 
 	// Parse the response
-	var response api.ListTaskDefinition
+	var response api.TaskDefinitionResponse
 	err = json.Unmarshal(rr.Body.Bytes(), &response)
 	require.NoError(t, err)
 

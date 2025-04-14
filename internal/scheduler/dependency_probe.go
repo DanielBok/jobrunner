@@ -28,12 +28,12 @@ type DependencyProbe struct {
 }
 
 type TaskDependency struct {
-	ID                int64                    `db:"id" json:"id"`                                 // Task Dependency ID
-	TaskID            int64                    `db:"task_id" json:"task_id"`                       // Task ID
-	DependsOn         int64                    `db:"depends_on" json:"depends_on"`                 // The parent which must be "completed" before this task can run
-	LookbackWindow    int                      `db:"lookback_window" json:"lookback_window"`       // How far back (in seconds) to lookback for the "complete" condition
-	RequiredCondition models.RequiredCondition `db:"required_condition" json:"required_condition"` // The type of completion required to say dependency is met
-	MinWaitSeconds    int                      `db:"min_wait_seconds" json:"min_wait_seconds"`     // Extra time needed to wait after parent completion before task can run
+	ID                int64                    `db:"id" json:"id"`                                // Task Dependency ID
+	TaskID            int64                    `db:"task_id" json:"taskId"`                       // Task ID
+	DependsOn         int64                    `db:"depends_on" json:"dependsOn"`                 // The parent which must be "completed" before this task can run
+	LookbackWindow    int                      `db:"lookback_window" json:"lookbackWindow"`       // How far back (in seconds) to lookback for the "complete" condition
+	RequiredCondition models.RequiredCondition `db:"required_condition" json:"requiredCondition"` // The type of completion required to say dependency is met
+	MinWaitSeconds    int                      `db:"min_wait_seconds" json:"minWaitSeconds"`      // Extra time needed to wait after parent completion before task can run
 }
 
 // Equal checks if 2 TaskDependency are the same

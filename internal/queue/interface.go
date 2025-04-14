@@ -9,13 +9,13 @@ import (
 
 // TaskMessage represents a message sent to the queue
 type TaskMessage struct {
-	RunID       int64     `json:"run_id"`
-	TaskID      int64     `json:"task_id"`
+	RunID       int64     `json:"runId"`
+	TaskID      int64     `json:"taskId"`
 	Command     string    `json:"command"`
-	ImageName   string    `json:"image_name,omitempty"`
-	Timeout     int64     `json:"timeout_seconds"`
-	MaxRetries  int       `json:"max_retries"`
-	ScheduledAt time.Time `json:"scheduled_at"`
+	ImageName   string    `json:"imageName,omitempty"`
+	Timeout     int64     `json:"timeoutSeconds"`
+	MaxRetries  int       `json:"maxRetries"`
+	ScheduledAt time.Time `json:"scheduledAt"`
 }
 
 // FormCommand breaks the single command line argument to its name and various args
